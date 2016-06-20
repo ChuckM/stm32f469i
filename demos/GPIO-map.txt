@@ -1,0 +1,31 @@
+GPIO Mapping on the STM32F469I-Discovery board
+==============================================
+
+Button
+	* Wakeup	PA0 (blue)
+LEDs
+	* LED1	PG6	(green)
+	* LED2	PD4	(orange)
+	* LED3	PD5	(red)
+	* LED4	PK3	(blue)
+
+SDIO Interface
+	* D0	PC8
+	* D1	PC9
+	* D2	PC10
+	* D3	PC11
+	* CMD	PD2
+	* CLK	PC12
+	* Card Detect (PG2)
+
+ST Link COM port (/dev/ttyACMx on Ubuntu Linux)
+	* PB11	RXD (from host computer)
+	* PB10	TXD	(to host computer)
+
+USB Port
+	* Vbus	PA9
+	* ID	PA10
+	* DP+	PA11
+	* DP-	PA12
+
+
