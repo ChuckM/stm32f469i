@@ -347,8 +347,8 @@ dump_page(uint8_t *addr, uint8_t *base)
  * in action. A bit of code at the beginning here trys to write
  * to address 0x30000000 which has no memory associated with it.
  * so boom! You get a hard fault.
-*/
 #define FAULT_TEST
+*/
 
 /*
  * This example initializes the SDRAM controller and dumps
