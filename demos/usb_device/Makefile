@@ -23,8 +23,5 @@ BINARY = usb_device
 
 LDSCRIPT = ../stm32f469i-discovery.ld
 
-print-%:
-	@echo '$*=$($*)'
-
 include ../../Makefile.include
 
