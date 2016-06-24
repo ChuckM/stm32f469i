@@ -126,6 +126,9 @@ __attribute__((constructor))
 static void SystemInit()
 {
 	clock_setup();
-	console_setup(115200);
+	/* Sadly the "virtual" COM port that ST provides
+	 * on the ST-Link is unable to keep up at 115,200
+	 */
+	console_setup(57600);
 	next_char = NULL;
 }
