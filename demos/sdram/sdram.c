@@ -221,7 +221,7 @@ sdram_init(void)
 	}
 
 	/* Enable the SDRAM Controller */
-	rcc_periph_clock_enable(RCC_FMC);
+	rcc_periph_clock_enable(RCC_FSMC);
 
 	/* Note the STM32F469I-DISCO board has the ram attached to bank 1 */
 	/* Timing parameters computed for a 168Mhz clock */
