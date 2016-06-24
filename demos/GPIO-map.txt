@@ -28,4 +28,134 @@ USB Port
 	* DP+	PA11
 	* DP-	PA12
 
+SDRAM
+  Data Bus
+	* D0	PD14
+	* D1	PD15
+	* D2	PD0
+	* D3	PD1
+	* D4	PE7
+	* D5	PE8
+	* D6	PE9
+	* D7	PE10
+	* D8	PE11
+	* D9	PE12
+	* D10	PE13
+	* D11	PE14
+	* D12	PE15
+	* D13	PD8
+	* D14	PD9
+	* D15	PD10
+	* D16	PH8
+	* D17	PH9
+	* D18	PH10
+	* D19	PH11
+	* D20	PH12
+	* D21	PH13
+	* D22	PH14
+	* D23	PH15
+	* D24	PI0
+	* D25	PI1
+	* D26	PI2
+	* D27	PI3
+	* D28	PI6
+	* D29	PI7
+	* D30	PI9
+	* D31	PI10
+  Address Bus
+	* A0	PF0
+	* A1	PF1
+	* A2	PF2
+	* A3	PF3
+	* A4	PF4
+	* A5	PF5
+	* A6	PF12
+	* A7	PF13
+	* A8	PF14
+	* A9	PF15
+	* A10	PG0
+	* A11	PG1
+	* A14	PG4		-- note that A12 and A13 are missing.
+	* A15	PG5
+  Control Lines
+	* NBL0	PE0
+	* NBL1	PE1
+	* NBL2	PI4
+	* NBL3	PI5
+	* SDNRAS	PF11
+	* SDNCAS	PG15
+	* SDCLK		PG8
+	* SDNE0		PH3
+	* SDCKE0	PH2
+	* SDNWE		PC0
 
+All SDRAM GPIOS
+  GPIOC,	0
+	* SDNWE		PC0
+
+  GPIOD, 	0,1,8,9,10,14,15
+	* D2	PD0
+	* D3	PD1
+	* D13	PD8
+	* D14	PD9
+	* D15	PD10
+	* D0	PD14
+	* D1	PD15
+
+  GPIOE,	0,1,7,8,9,10,11,12,13,14,15
+	* NBL0	PE0
+	* NBL1	PE1
+	* D4	PE7
+	* D5	PE8
+	* D6	PE9
+	* D7	PE10
+	* D8	PE11
+	* D9	PE12
+	* D10	PE13
+	* D11	PE14
+	* D12	PE15
+
+  GPIOF,	0,1,2,3,4,5,11,12,13,14,15
+	* A0	PF0
+	* A1	PF1
+	* A2	PF2
+	* A3	PF3
+	* A4	PF4
+	* A5	PF5
+	* SDNRAS	PF11
+	* A6	PF12
+	* A7	PF13
+	* A8	PF14
+	* A9	PF15
+
+  GPIOG,	0,1,4,5,8,15
+	* A10	PG0		GPIOG,	0,1,4,5,8,15
+	* A11	PG1
+	* A14	PG4
+	* A15	PG5
+	* SDCLK		PG8
+	* SDNCAS	PG15
+
+  GPIOH,	2,3,8,9,10,11,12,13,14,15
+	* SDCKE0	PH2
+	* SDNE0		PH3
+	* D16	PH8
+	* D17	PH9
+	* D18	PH10
+	* D19	PH11
+	* D20	PH12
+	* D21	PH13
+	* D22	PH14
+	* D23	PH15
+
+  GPIOI,	0,1,2,3,4,5,6,7,9,10
+	* D24	PI0
+	* D25	PI1
+	* D26	PI2
+	* D27	PI3
+	* NBL2	PI4
+	* NBL3	PI5
+	* D28	PI6
+	* D29	PI7
+	* D30	PI9
+	* D31	PI10
