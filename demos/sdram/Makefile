@@ -15,9 +15,9 @@
 # along with this library.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-OBJS = ../util/retarget.o ../util/console.o ../util/clock.o
+OBJS = ../util/retarget.o ../util/console.o ../util/clock.o ../util/sdram.o
 
-BINARY = sdram
+BINARY = main
 
 LDSCRIPT = ../stm32f469i-discovery.ld
 

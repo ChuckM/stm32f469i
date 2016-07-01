@@ -33,7 +33,7 @@
 #include <libopencm3/stm32/iwdg.h>
 #include <libopencm3/cm3/scb.h>
 #include <libopencm3/cm3/cortex.h>
-#include "../util/console.h"
+#include "../util/util.h"
 
 /*
  * Some definitions of our console "functions" attached to the
@@ -250,4 +250,27 @@ void console_setup(int baud)
 void console_baud(int baud_rate)
 {
 	usart_set_baudrate(CONSOLE_UART, baud_rate);
+}
+
+char *
+console_color(TERM_COLOR c)
+{
+	switch (c) {
+		case RED:
+			return ("\033[31;40;1m");
+		case GREEN:
+			return ("\033[32;40;1m");
+		case BLUE:
+			return ("\033[34;40;1m");
+		case YELLOW:
+			return ("\033[33;40;1m");
+		case CYAN:
+			return ("\033[35;40;1m");
+		case MAGENTA:
+			return ("\033[36;40;1m");
+		case WHITE:
+			return ("\033[37;40;1m");
+		default:
+			return ("\033[0m");
+	}
 }
