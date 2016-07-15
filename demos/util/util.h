@@ -32,6 +32,22 @@ void console_baud(int baud);
 /* this is for fun, if you type ^C to this example it will reset */
 #define RESET_ON_CTRLC
 
+typedef enum led_color_e {
+	RED_LED,
+	GREEN_LED,
+	BLUE_LED,
+	ORANGE_LED
+} LED_COLOR;
+
+
+/* dump memory contents as hex bytes */
+void hex_dump(uint32_t addr, uint8_t *data, unsigned int len);
+
+void on_led(LED_COLOR c);
+void off_led(LED_COLOR c);
+void toggle_led(LED_COLOR c);
+void led_init(void);
+
 /* Defines and prototypes for the sdram code */
 
 #define SDRAM_BASE_ADDRESS ((uint8_t *)(0xC0000000))

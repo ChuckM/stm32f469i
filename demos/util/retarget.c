@@ -25,14 +25,18 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <ctype.h>
-#include "../util/clock.h"
-#include "../util/console.h"
+#include "../util/util.h"
 
 #ifndef NULL
 #define NULL	0	
 #endif
 
 #define BUFLEN 127
+
+void null_init(void);
+
+#pragma weak led_init = null_init
+#pragma weak sdram_init = null_init
 
 static void SystemInit(void);
 
@@ -130,5 +134,9 @@ static void SystemInit()
 	 * on the ST-Link is unable to keep up at 115,200
 	 */
 	console_setup(57600);
+	led_init();
+	sdram_init();
 	next_char = NULL;
 }
+
+void null_init(void) { }
