@@ -152,9 +152,7 @@ main(void)
 	*addr = 0;
 #endif
 
-	printf("Initializing SDRAM controller ... \n");
-	sdram_init();
-	printf("Done.\nOriginal data:\n");
+	printf("Original SDRAM data:\n");
 	addr = SDRAM_BASE_ADDRESS; 
 	(void) dump_page(addr, NULL);
 	printf("Status register is 0x%x\n", (int) FMC_SDSR);
