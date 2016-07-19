@@ -572,7 +572,7 @@ uint8_t sector_data[256];
 uint8_t test_sector_data[256];
 
 #define SWIDTH 16
-#define SHEIGHT 32 
+#define SHEIGHT 16 
 
 void draw_pixel(int, int, uint16_t);
 
@@ -645,7 +645,7 @@ main(void)
 		printf("%02X", id_string[i]);
 	}
 	printf("\n");
-	printf("Updating volatile register with 16 dummy cycles\n");
+	printf("Updating volatile register with 10 dummy cycles\n");
 	reg = 0xAB;
 	write_flash_register(VOLATILE_REG, reg);
 
