@@ -15,13 +15,16 @@
 # along with this library.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-OBJS = ../util/led.o ../util/console.o ../util/clock.o ../util/retarget.o ../util/hexdump.o
+OBJS = ../util/led.o ../util/console.o ../util/clock.o \
+	   ../util/retarget.o ../util/hexdump.o 
 
 BINARY = qspi
 
 LDSCRIPT = ../stm32f469i-discovery.ld
 
-# CFLAGS = -I./libopencm3/include
+CFLAGS = -I../../simple-graphics/include
+LDFLAGS = -L../../simple-graphics/lib
+LDLIBS = -lgfx
 
 include ../../Makefile.include
 

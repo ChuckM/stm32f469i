@@ -9,6 +9,7 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/qspi.h>
 #include <libopencm3/stm32/dma.h>
+#include <gfx.h>
 #include "../util/util.h"
 
 void qspi_init(void);
@@ -16,7 +17,7 @@ void qspi_read_id(uint8_t *res);
 
 #define QSPI_BASE_ADDRESS	((uint8_t *)(0x90000000))
 
-#define TEST_ADDR	0x1000
+#define TEST_ADDR	0x1100
 
 /*
  * Quad SPI initialization
@@ -407,8 +408,8 @@ void
 qspi_write_page(uint32_t addr, uint8_t *buf, int len)
 {
 	uint32_t ccr, sr;
-	uint32_t tmp;
-	int i, status;
+	int tmp;
+	int status;
 
 	printf("Write Sector\n");
 	printf("  Initial QSPI Status : "); print_status(QUADSPI_SR);
@@ -418,44 +419,25 @@ qspi_write_page(uint32_t addr, uint8_t *buf, int len)
 		console_color(YELLOW), (status & 0x2) ? "Succeeded" : "FAILED",
 		console_color(NONE));
 	ccr = QUADSPI_SET(CCR, FMODE, QUADSPI_CCR_FMODE_IWRITE);
-	ccr |= QUADSPI_SET(CCR, DCYC, 0); /* 10 dummy cycles */
+	/* adjusting this to 0 fixed the write issue. */
+	ccr |= QUADSPI_SET(CCR, DCYC, 0); 
 	ccr |= QUADSPI_SET(CCR, INST, 0x32);	/* write 256 bytes */
+	/* For some reason 1-1-4 command */
 	ccr |= QUADSPI_SET(CCR, IMODE, QUADSPI_CCR_MODE_1LINE);
-/* yyy write nline */
 	ccr |= QUADSPI_SET(CCR, ADMODE, QUADSPI_CCR_MODE_1LINE);
-/* does this cause the first byte to show up? */
 	ccr |= QUADSPI_SET(CCR, ADSIZE, 2);	/* 24 bit address */
-/* yyy write nline */
 	ccr |= QUADSPI_SET(CCR, DMODE, QUADSPI_CCR_MODE_4LINE);
 	printf("CCR value = 0x%08X\n", (unsigned int) ccr);
 	printf("CR value = 0x%08X\n", (unsigned int) QUADSPI_CR);
 	QUADSPI_DLR = 255;
 	QUADSPI_AR = addr;
 	QUADSPI_CCR = ccr; /* go write a page */
-/*
-	May be a timing issue 
-	printf("After writing CCR status:\n");
-	print_status(QUADSPI_SR);
-*/
-	i = 0;
 	tmp = 0;
 	do {
 		sr = QUADSPI_SR;
 		if (sr & QUADSPI_SR_TCF) {
 			break;
 		}
-#if 0
-		test #2 just dumping 256 bytes as fast as possible
-
-		sr = QUADSPI_SR;
-		while (((sr & QUADSPI_SR_BUSY) != 0) && (QUADSPI_GET(SR, FLEVEL, sr) == 0)) ;
-		tmp = *(buf + i) & 0xff;
-		tmp |= (*(buf + 1 + i) & 0xff) << 8;
-		tmp |= (*(buf + 2 + i) & 0xff) << 16;
-		tmp |= (*(buf + 3 + i) & 0xff) << 24;
-		printf("0X%0X - ", (unsigned int) tmp);
-		QUADSPI_DR = tmp;
-#endif
 		tmp++;
 		QUADSPI_BYTE_DR = *buf++;
 	} while (QUADSPI_SR & QUADSPI_SR_BUSY);
@@ -470,6 +452,9 @@ qspi_write_page(uint32_t addr, uint8_t *buf, int len)
 		tmp++;
 		status = read_flash_register(STATUS_REG);
 	} while (status & 1); /* write in progress */
+	if (tmp != len) {
+		fprintf(stderr, "Warning: wrote %d bytes, expected to write %d\n", tmp, len);
+	}
 	printf("Done. (waited %d loops)\n", (int) tmp);
 	printf("  ... QSPI Status at the end : "); print_status(QUADSPI_SR);
 	printf("\n");
@@ -587,19 +572,41 @@ uint8_t sector_data[4096];
 uint8_t test_sector_data[4096];
 char *test_phrase = "The Quick brown fox jumped over 1,234,567,890 foxes. ";
 
-#define FLASH_DYC_MASK	0xf
-#define FLASH_DYC_SHIFT	4
+#define SWIDTH 16
+#define SHEIGHT 256 
+
+void draw_pixel(int, int, uint16_t);
+
+void
+draw_pixel(int x, int y, uint16_t color)
+{
+	sector_data[y*SWIDTH + x] = color & 0xff;
+}
+
 int
 main(void)
 {
 	uint8_t id_string[80];
-	char *t, *b;
 	uint16_t reg;
 	unsigned int i;
 	uint8_t	status;
 
-/* xxx */
+	/* This code fills the test sector data with
+     * some information. In this case PG 00 which
+	 * is easy to see it is correct (or not) in
+	 * the memory dump. 
+	 */
+	gfx_init(draw_pixel, SWIDTH, SHEIGHT, GFX_FONT_SMALL);
+	gfx_fillScreen((uint16_t) ' ');
+	gfx_setTextColor((uint16_t) '*', (uint16_t) ' ');
+	gfx_setCursor(0, 8);
+	gfx_puts((unsigned char *)"PG");
+	gfx_setCursor(0, 16);
+	gfx_puts((unsigned char *)"00");
+
 	fprintf(stderr, "QUAD SPI Example/Demo code\n");
+	printf("Test address for this run is : %s0x%06x%s\n",
+		console_color(YELLOW), (unsigned int) TEST_ADDR, console_color(NONE));
 	printf("Initializing QUAD SPI port ... ");
 	fflush(stdout);
 	qspi_init();
@@ -640,25 +647,8 @@ main(void)
 	print_config(reg, "Non-Volatile");
 	reg = read_flash_register(VOLATILE_REG);
 	printf("Volatile Register: 0X%02X\n", (int) reg);
-	print_vol_config(reg, "Volatile (pre-update)");
-/* this could use work 
-	reg = (reg & 0x0f) | (10 << 4);
-	printf("Updated Volatile Register: 0X%02X\n", (int) reg);
-	write_flash_register(VOLATILE_REG, reg);
-*/
-	reg = 0;
-	reg = read_flash_register(VOLATILE_REG);
-	printf("Re-read Volatile Register: 0X%02X\n", (int) reg);
-	print_vol_config(reg, "Volatile (post update)");
+	print_vol_config(reg, "Volatile (updated with 0xAB)");
 
-	/* fill the test sector with some data */
-	for (i = 0; i < 10; i++) {
-		t = (char *) &sector_data[i * 53];
-		b = test_phrase;
-		while (*b != 0) {
-			*t++ = *b++;
-		}
-	}
 	printf("Press a key to continue\n");
 	(void) console_getc(1);
 	printf("Test sector data\n");
@@ -684,11 +674,6 @@ main(void)
 	hex_dump(TEST_ADDR, test_sector_data, 256);
 	printf("Press a key to continue.\n");
 	(void) console_getc(1);
-#if 0
-	qspi_read_sector(0, &test_sector_data[0], 4096);
-	printf("Read back test data\n");
-	hex_dump(0x90000000U, test_sector_data, 256);
-#endif
 	while (1) {
 		toggle_led(RED_LED);
 		toggle_led(ORANGE_LED);

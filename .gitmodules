@@ -1,3 +1,6 @@
 [submodule "libopencm3"]
 	path = libopencm3
 	url = https://github.com/ChuckM/libopencm3
+[submodule "simple-graphics"]
+	path = simple-graphics
+	url = https://github.com/ChuckM/simple-graphics
