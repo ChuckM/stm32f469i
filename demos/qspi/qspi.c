@@ -203,6 +203,7 @@ qspi_read_sector(uint32_t addr, uint8_t *buf, int len)
 }
 
 #define FLASH_SECTOR_ERASE	0xd8
+#define FLASH_SUB_SECTOR_ERASE	0x20
 #define FLASH_WRITE_ENABLE	0x06
 #define FLASH_WRITE_DISABLE	0x04
 #define FLASH_READ_STATUS	0x05
@@ -368,7 +369,7 @@ qspi_sector_erase(uint32_t addr)
 	uint32_t ccr, sr;
 	uint8_t	status;
 
-	printf("Erase Sector: %d\n", (int) addr / 4096);
+	printf("Erase Sub-Sector: %d\n", (int) (addr >> 12));
 	qspi_enable(FLASH_WRITE_ENABLE); /* set the write latch */
 	printf("Status after WRITE ENABLE: "); print_status(QUADSPI_SR);
 	status = read_flash_register(STATUS_REG);
@@ -376,7 +377,7 @@ qspi_sector_erase(uint32_t addr)
 	ccr  = QUADSPI_SET(CCR, FMODE, QUADSPI_CCR_FMODE_IWRITE);
 	ccr |= QUADSPI_SET(CCR, ADSIZE, 2);
 	ccr |= QUADSPI_SET(CCR, ADMODE, QUADSPI_CCR_MODE_1LINE);
-	ccr |= QUADSPI_SET(CCR, INST, FLASH_SECTOR_ERASE);
+	ccr |= QUADSPI_SET(CCR, INST, FLASH_SUB_SECTOR_ERASE);
 	ccr |= QUADSPI_SET(CCR, IMODE, QUADSPI_CCR_MODE_1LINE);
 	QUADSPI_CCR = ccr;
 	QUADSPI_AR = addr;
@@ -412,7 +413,9 @@ qspi_write_page(uint32_t addr, uint8_t *buf, int len)
 	int status;
 
 	printf("Write Sector\n");
-	printf("  Initial QSPI Status : "); print_status(QUADSPI_SR);
+	printf("  Initial QSPI Status : ");
+	print_status(QUADSPI_SR);
+	printf("\n");
 	qspi_enable(FLASH_WRITE_ENABLE);
 	status = read_flash_register(STATUS_REG);
 	printf("\n  Write enable : %s%s%s\n", 
@@ -447,15 +450,12 @@ qspi_write_page(uint32_t addr, uint8_t *buf, int len)
 	printf("Wrote %d bytes, SPI status ", (int) tmp);
 	print_status(QUADSPI_SR);
 	printf("\n");
-	tmp = 0;
 	do {
-		tmp++;
 		status = read_flash_register(STATUS_REG);
 	} while (status & 1); /* write in progress */
 	if (tmp != len) {
 		fprintf(stderr, "Warning: wrote %d bytes, expected to write %d\n", tmp, len);
 	}
-	printf("Done. (waited %d loops)\n", (int) tmp);
 	printf("  ... QSPI Status at the end : "); print_status(QUADSPI_SR);
 	printf("\n");
 	QUADSPI_FCR = 0x1f;
@@ -567,13 +567,12 @@ print_flags(uint16_t flags)
 		(flags & 0x2) ? "FAILURE" : "Clear");
 }
 
-/* one 4K sector from the FLASH chip */
-uint8_t sector_data[4096];
-uint8_t test_sector_data[4096];
-char *test_phrase = "The Quick brown fox jumped over 1,234,567,890 foxes. ";
+/* one 256 byte snapshots from the FLASH chip */
+uint8_t sector_data[256];
+uint8_t test_sector_data[256];
 
 #define SWIDTH 16
-#define SHEIGHT 256 
+#define SHEIGHT 32 
 
 void draw_pixel(int, int, uint16_t);
 
@@ -583,9 +582,15 @@ draw_pixel(int x, int y, uint16_t color)
 	sector_data[y*SWIDTH + x] = color & 0xff;
 }
 
+static const char HEX_CHARS[16] = {
+	'0','1','2','3','4','5','6','7',
+	'8','9','A','B','C','D','E','F'
+};
+
 int
 main(void)
 {
+	uint32_t addr;
 	uint8_t id_string[80];
 	uint16_t reg;
 	unsigned int i;
@@ -599,10 +604,14 @@ main(void)
 	gfx_init(draw_pixel, SWIDTH, SHEIGHT, GFX_FONT_SMALL);
 	gfx_fillScreen((uint16_t) ' ');
 	gfx_setTextColor((uint16_t) '*', (uint16_t) ' ');
-	gfx_setCursor(0, 8);
+	gfx_setCursor(0, 7);
 	gfx_puts((unsigned char *)"PG");
-	gfx_setCursor(0, 16);
-	gfx_puts((unsigned char *)"00");
+	gfx_setCursor(0, 15);
+	/* pull out page number from TEST_ADDR value as hex digits */
+	id_string[0] = HEX_CHARS[((TEST_ADDR >> 12 ) & 0xf)];
+	id_string[1] = HEX_CHARS[((TEST_ADDR >> 8 ) & 0xf)];
+	id_string[2] = 0;
+	gfx_puts((unsigned char *) &id_string[0]);
 
 	fprintf(stderr, "QUAD SPI Example/Demo code\n");
 	printf("Test address for this run is : %s0x%06x%s\n",
@@ -614,10 +623,8 @@ main(void)
 	for (i = 0; i < sizeof(id_string); i++) {
 		id_string[i] = 0;
 	}
-/*
 	qspi_enable(FLASH_RESET_ENABLE);
 	qspi_enable(FLASH_RESET_MEMORY);
-*/
 	reg = read_flash_register(FLAG_REG);
 	print_flags(reg);
 	do {
@@ -655,28 +662,56 @@ main(void)
 	hex_dump(TEST_ADDR, sector_data, 256);
 	printf("Press a key to continue.\n");
 	(void) console_getc(1);
-	qspi_read_sector(TEST_ADDR, &test_sector_data[0], 4096);
+	qspi_read_sector(TEST_ADDR, &test_sector_data[0], 256);
 	printf("%sTest sector before writing%s\n", console_color(MAGENTA), console_color(NONE));
 	hex_dump(TEST_ADDR, test_sector_data, 256);
 	printf("Press a key to continue.\n");
 	(void) console_getc(1);
 	printf("Erasing sector 0\n");
 	qspi_sector_erase(TEST_ADDR);
-	qspi_read_sector(TEST_ADDR, &test_sector_data[0], 4096);
+	qspi_read_sector(TEST_ADDR, &test_sector_data[0], 256);
 	printf("%sTest sector after erasing%s\n", console_color(MAGENTA), console_color(NONE));
 	hex_dump(TEST_ADDR, test_sector_data, 256);
 	printf("Press a key to continue.\n");
 	(void) console_getc(1);
 	printf("Writing test data \n");
 	qspi_write_page(TEST_ADDR, &sector_data[0], 256);
-	qspi_read_sector(TEST_ADDR, &test_sector_data[0], 4096);
+	qspi_read_sector(TEST_ADDR, &test_sector_data[0], 256);
 	printf("%sTest sector after writing%s\n", console_color(MAGENTA), console_color(NONE));
 	hex_dump(TEST_ADDR, test_sector_data, 256);
 	printf("Press a key to continue.\n");
 	(void) console_getc(1);
+	addr = TEST_ADDR;
 	while (1) {
+		char c;
+		c = console_getc(1);
+		if ((c == '-') || (c == '_')) {
+			addr = addr - 0x100;
+			if (addr & 0x80000000) {
+				addr = 0;
+			}
+		} else if ((c == '+') || (c == '=')) {
+			addr = addr + 0x100;
+			if (addr > 0xffff00) {
+				addr = 0xffff00;
+			}
+		} else if (c == 'm') {
+			gfx_fillScreen((uint16_t) ' ');
+			gfx_setTextColor((uint16_t) '*', (uint16_t) ' ');
+			gfx_setCursor(0, 7);
+			gfx_puts((unsigned char *)"PG");
+			gfx_setCursor(0, 15);
+			/* pull out page number from TEST_ADDR value as hex digits */
+			id_string[0] = HEX_CHARS[((addr >> 12 ) & 0xf)];
+			id_string[1] = HEX_CHARS[((addr >> 8 ) & 0xf)];
+			id_string[2] = 0;
+			gfx_puts((unsigned char *) &id_string[0]);
+			qspi_write_page(addr, &sector_data[0], 256);
+		} else if (c == 'e') {
+			qspi_sector_erase(addr);
+		}
+		qspi_read_sector(addr, &test_sector_data[0], 256);
+		hex_dump(addr, test_sector_data, 256);
 		toggle_led(RED_LED);
-		toggle_led(ORANGE_LED);
-		msleep(500);
 	}
 }
