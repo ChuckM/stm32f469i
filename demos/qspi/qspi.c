@@ -16,6 +16,7 @@ void qspi_read_id(uint8_t *res);
 
 #define QSPI_BASE_ADDRESS	((uint8_t *)(0x90000000))
 
+#define TEST_ADDR	0x1000
 
 /*
  * Quad SPI initialization
@@ -66,7 +67,7 @@ qspi_init(void)
 			CKMODE (ClockMode) = 0 (clock mode 0)
 	*/
 	QUADSPI_CR = QUADSPI_SET(CR, PRESCALE, 1) | QUADSPI_SET(CR, FTHRES, 3) | QUADSPI_CR_SSHIFT;
-	QUADSPI_DCR = QUADSPI_SET(DCR, FSIZE, 24) | QUADSPI_SET(DCR, CSHT, 1) | QUADSPI_DCR_CKMODE;
+	QUADSPI_DCR = QUADSPI_SET(DCR, FSIZE, 23) | QUADSPI_SET(DCR, CSHT, 1) | QUADSPI_DCR_CKMODE;
 	/* enable it qspi_enable() */
 	QUADSPI_CR |= QUADSPI_CR_EN;
 }
@@ -80,7 +81,7 @@ void print_status(uint32_t s);
 void
 print_status(uint32_t s)
 {
-	printf("%s .. Status: ", console_color(CYAN));
+	printf("%s QUADSPI_SR: ", console_color(CYAN));
 	printf("[%s%d%s] ", console_color(YELLOW),
 		(unsigned int) QUADSPI_GET(SR, FLEVEL, s), console_color(CYAN));
 	printf("%s ", (s & QUADSPI_SR_BUSY) ? "BSY" : "---");
@@ -89,7 +90,8 @@ print_status(uint32_t s)
 	printf("%s ", (s & QUADSPI_SR_FTF) ? "FTF" : "---");
 	printf("%s ", (s & QUADSPI_SR_TCF) ? "TCF" : "---");
 	printf("%s ", (s & QUADSPI_SR_TEF) ? "TEF" : "---");
-	printf("%s\n", console_color(NONE));
+	printf("%s ", console_color(NONE));
+	fflush(stdout);
 }
 
 int qspi_read_data(uint8_t *buf, int max_len);
@@ -148,7 +150,7 @@ qspi_read_id(uint8_t *res)
 	QUADSPI_CCR = tmp;
 	len = qspi_read_data(res, 80);
 	print_status(QUADSPI_SR);
-	printf("Read ID returned %d bytes\n", len);
+	printf("\nRead ID returned %d bytes\n", len);
 	QUADSPI_FCR = 0x1f;
 }
 
@@ -171,8 +173,9 @@ qspi_read_sector(uint32_t addr, uint8_t *buf, int len)
 	uint32_t ccr;
 	int bcnt;
 
-	printf("Read Sector: Initial Status is\n");
+	printf("Read Sector: Initial Status is : ");
 	print_status(QUADSPI_SR);
+	printf("\n");
 
 	QUADSPI_DLR = len - 1;
 	ccr = QUADSPI_SET(CCR, FMODE, QUADSPI_CCR_FMODE_IREAD);
@@ -188,11 +191,13 @@ qspi_read_sector(uint32_t addr, uint8_t *buf, int len)
 	printf("CR value = 0x%08X\n", (unsigned int) QUADSPI_CR);
 	QUADSPI_CCR = ccr; /* go get a sector */
 	QUADSPI_AR = addr;
-	printf("After writing CCR status:\n");
+	printf("After writing CCR status: ");
 	print_status(QUADSPI_SR);
+	printf("\n");
 	bcnt = qspi_read_data(buf, len);
-	printf("After fetching %d bytes:\n", bcnt);
+	printf("After fetching %d bytes: ", bcnt);
 	print_status(QUADSPI_SR);
+	printf("\n");
 	QUADSPI_FCR = 0x1f;
 }
 
@@ -237,8 +242,9 @@ qspi_enable(uint8_t cmd)
 	ccr |= QUADSPI_SET(CCR, IMODE, QUADSPI_CCR_MODE_1LINE);
 	ccr |= QUADSPI_SET(CCR, FMODE, QUADSPI_CCR_FMODE_IWRITE);
 	QUADSPI_CCR = ccr;
-	printf("QSPI Enable (%s) Status: \n", op);
+	printf("QSPI Enable (%s) Status: ", op);
 	print_status(QUADSPI_SR);
+	printf("\n");
 	do {
 		sr = QUADSPI_SR;
 	} while (sr & QUADSPI_SR_BUSY);
@@ -363,9 +369,9 @@ qspi_sector_erase(uint32_t addr)
 
 	printf("Erase Sector: %d\n", (int) addr / 4096);
 	qspi_enable(FLASH_WRITE_ENABLE); /* set the write latch */
-	printf("Status after WRITE ENABLE:\n"); print_status(QUADSPI_SR);
+	printf("Status after WRITE ENABLE: "); print_status(QUADSPI_SR);
 	status = read_flash_register(STATUS_REG);
-	printf("Flash chip status after READ STATUS: 0x%x\n", (unsigned int) status);
+	printf("\nFlash chip status after READ STATUS: 0x%x\n", (unsigned int) status);
 	ccr  = QUADSPI_SET(CCR, FMODE, QUADSPI_CCR_FMODE_IWRITE);
 	ccr |= QUADSPI_SET(CCR, ADSIZE, 2);
 	ccr |= QUADSPI_SET(CCR, ADMODE, QUADSPI_CCR_MODE_1LINE);
@@ -405,27 +411,26 @@ qspi_write_page(uint32_t addr, uint8_t *buf, int len)
 	int i, status;
 
 	printf("Write Sector\n");
-	printf("  ... QSPI Status :\n"); print_status(QUADSPI_SR);
-	if (*buf == 0) {
-		printf("Len is %d\n", len);
-	}
-	QUADSPI_FCR = 0x1f; /* reset all flags */
+	printf("  Initial QSPI Status : "); print_status(QUADSPI_SR);
 	qspi_enable(FLASH_WRITE_ENABLE);
 	status = read_flash_register(STATUS_REG);
-	printf("Status after WRITE ENABLE: 0x%x\n", (unsigned int) status);
+	printf("\n  Write enable : %s%s%s\n", 
+		console_color(YELLOW), (status & 0x2) ? "Succeeded" : "FAILED",
+		console_color(NONE));
 	ccr = QUADSPI_SET(CCR, FMODE, QUADSPI_CCR_FMODE_IWRITE);
-	ccr |= QUADSPI_SET(CCR, DCYC, 10); /* 10 dummy cycles */
+	ccr |= QUADSPI_SET(CCR, DCYC, 0); /* 10 dummy cycles */
 	ccr |= QUADSPI_SET(CCR, INST, 0x32);	/* write 256 bytes */
 	ccr |= QUADSPI_SET(CCR, IMODE, QUADSPI_CCR_MODE_1LINE);
-	ccr |= QUADSPI_SET(CCR, ADMODE, QUADSPI_CCR_MODE_4LINE);
+/* yyy write nline */
+	ccr |= QUADSPI_SET(CCR, ADMODE, QUADSPI_CCR_MODE_1LINE);
 /* does this cause the first byte to show up? */
 	ccr |= QUADSPI_SET(CCR, ADSIZE, 2);	/* 24 bit address */
+/* yyy write nline */
 	ccr |= QUADSPI_SET(CCR, DMODE, QUADSPI_CCR_MODE_4LINE);
 	printf("CCR value = 0x%08X\n", (unsigned int) ccr);
 	printf("CR value = 0x%08X\n", (unsigned int) QUADSPI_CR);
 	QUADSPI_DLR = 255;
 	QUADSPI_AR = addr;
-	QUADSPI_DR = 0;
 	QUADSPI_CCR = ccr; /* go write a page */
 /*
 	May be a timing issue 
@@ -457,15 +462,17 @@ qspi_write_page(uint32_t addr, uint8_t *buf, int len)
 
 	status = read_flash_register(STATUS_REG);
 	printf("Status after WRITE PAGE: 0x%x\n", (unsigned int) status);
-	printf("Wrote %d bytes, SPI status is ... ", (int) tmp);
+	printf("Wrote %d bytes, SPI status ", (int) tmp);
 	print_status(QUADSPI_SR);
+	printf("\n");
 	tmp = 0;
 	do {
 		tmp++;
 		status = read_flash_register(STATUS_REG);
 	} while (status & 1); /* write in progress */
 	printf("Done. (waited %d loops)\n", (int) tmp);
-	printf("  ... QSPI Status at the end :\n"); print_status(QUADSPI_SR);
+	printf("  ... QSPI Status at the end : "); print_status(QUADSPI_SR);
+	printf("\n");
 	QUADSPI_FCR = 0x1f;
 }
 
@@ -655,26 +662,26 @@ main(void)
 	printf("Press a key to continue\n");
 	(void) console_getc(1);
 	printf("Test sector data\n");
-	hex_dump(0x90000000U, sector_data, 256);
+	hex_dump(TEST_ADDR, sector_data, 256);
 	printf("Press a key to continue.\n");
 	(void) console_getc(1);
-	qspi_read_sector(0, &test_sector_data[0], 4096);
+	qspi_read_sector(TEST_ADDR, &test_sector_data[0], 4096);
 	printf("%sTest sector before writing%s\n", console_color(MAGENTA), console_color(NONE));
-	hex_dump(0x90000000U, test_sector_data, 256);
+	hex_dump(TEST_ADDR, test_sector_data, 256);
 	printf("Press a key to continue.\n");
 	(void) console_getc(1);
 	printf("Erasing sector 0\n");
-	qspi_sector_erase(0);
-	qspi_read_sector(0, &test_sector_data[0], 4096);
+	qspi_sector_erase(TEST_ADDR);
+	qspi_read_sector(TEST_ADDR, &test_sector_data[0], 4096);
 	printf("%sTest sector after erasing%s\n", console_color(MAGENTA), console_color(NONE));
-	hex_dump(0x90000000U, test_sector_data, 256);
+	hex_dump(TEST_ADDR, test_sector_data, 256);
 	printf("Press a key to continue.\n");
 	(void) console_getc(1);
 	printf("Writing test data \n");
-	qspi_write_page(0, &sector_data[0], 256);
-	qspi_read_sector(0, &test_sector_data[0], 4096);
+	qspi_write_page(TEST_ADDR, &sector_data[0], 256);
+	qspi_read_sector(TEST_ADDR, &test_sector_data[0], 4096);
 	printf("%sTest sector after writing%s\n", console_color(MAGENTA), console_color(NONE));
-	hex_dump(0x90000000U, test_sector_data, 256);
+	hex_dump(TEST_ADDR, test_sector_data, 256);
 	printf("Press a key to continue.\n");
 	(void) console_getc(1);
 #if 0
