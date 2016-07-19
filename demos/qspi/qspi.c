@@ -188,8 +188,6 @@ qspi_read_sector(uint32_t addr, uint8_t *buf, int len)
 	ccr |= QUADSPI_SET(CCR, ADMODE, QUADSPI_CCR_MODE_4LINE);
 	ccr |= QUADSPI_SET(CCR, ADSIZE, 2);	/* 24 bit address */
 	ccr |= QUADSPI_SET(CCR, DMODE, QUADSPI_CCR_MODE_4LINE);
-	printf("CCR value = 0x%08X\n", (unsigned int) ccr);
-	printf("CR value = 0x%08X\n", (unsigned int) QUADSPI_CR);
 	QUADSPI_CCR = ccr; /* go get a sector */
 	QUADSPI_AR = addr;
 	printf("After writing CCR status: ");
@@ -220,19 +218,15 @@ qspi_enable(uint8_t cmd)
 	
 	switch (cmd) {
 		case FLASH_WRITE_ENABLE:
-			printf("Enable Flash for write.\n");
 			op = "Write Enable";
 			break;
 		case FLASH_WRITE_DISABLE:
-			printf("Disable writing to the flash.\n");
 			op = "Write Disable";
 			break;
 		case FLASH_RESET_MEMORY:
-			printf("Reset FLASH Memory.\n");
 			op = "Reset FLASH";
 			break;
 		case FLASH_RESET_ENABLE:
-			printf("Enable the FLASH Reset comand.\n");
 			op = "Enable RESET";
 			break;
 		default:
@@ -244,17 +238,13 @@ qspi_enable(uint8_t cmd)
 	ccr |= QUADSPI_SET(CCR, IMODE, QUADSPI_CCR_MODE_1LINE);
 	ccr |= QUADSPI_SET(CCR, FMODE, QUADSPI_CCR_FMODE_IWRITE);
 	QUADSPI_CCR = ccr;
-	printf("QSPI Enable (%s) Status: ", op);
-	print_status(QUADSPI_SR);
-	printf("\n");
 	do {
 		sr = QUADSPI_SR;
 	} while (sr & QUADSPI_SR_BUSY);
-	if (sr & QUADSPI_SR_TEF) {
-		printf("Done (Error)\n");
-	} else {
-		printf("Done.\n");
-	}
+	printf("QSPI Enable (%s) Status%s ", op,
+		(sr & QUADSPI_SR_TEF)? " [Error] :" : ":");
+	print_status(sr);
+	printf("\n");
 	QUADSPI_FCR = 0x1f; /* reset the flags */
 }
 
@@ -360,9 +350,38 @@ write_flash_register(enum flash_reg r, uint16_t value)
 	QUADSPI_FCR = 0x1f;
 }
 
+char * chip_status(uint8_t status);
+/*
+ * print out the operational status of the FLASH chip
+ * from its status byte. (ignores the protection bits)
+ */
+char *
+chip_status(uint8_t status)
+{
+
+	switch( status & 0x3 ) {
+		case 0:
+			return ("Idle");
+			break;
+		case 1:
+			return ("Write in Progress");
+			break;
+		case 2:
+			return ("Write Latch Enabled");
+			break;
+		case 3:
+			return ("Write Latch Enabled, Write in Progress");
+			break;
+	}
+	return "idle";
+}
 
 void qspi_sector_erase(uint32_t addr);
 
+/*
+ * Erase a sub-sector of the flash chip. There are 4096
+ * 4096 byte sub sectors (16MB total).
+ */
 void 
 qspi_sector_erase(uint32_t addr)
 {
@@ -371,9 +390,11 @@ qspi_sector_erase(uint32_t addr)
 
 	printf("Erase Sub-Sector: %d\n", (int) (addr >> 12));
 	qspi_enable(FLASH_WRITE_ENABLE); /* set the write latch */
-	printf("Status after WRITE ENABLE: "); print_status(QUADSPI_SR);
+	printf("QUADSPI Status after WRITE ENABLE: "); print_status(QUADSPI_SR);
 	status = read_flash_register(STATUS_REG);
-	printf("\nFlash chip status after READ STATUS: 0x%x\n", (unsigned int) status);
+	printf("\nFLASH chip status after WRITE ENABLE: (0x%x) %s\n", (unsigned int) status,
+		chip_status(status));
+
 	ccr  = QUADSPI_SET(CCR, FMODE, QUADSPI_CCR_FMODE_IWRITE);
 	ccr |= QUADSPI_SET(CCR, ADSIZE, 2);
 	ccr |= QUADSPI_SET(CCR, ADMODE, QUADSPI_CCR_MODE_1LINE);
@@ -385,13 +406,14 @@ qspi_sector_erase(uint32_t addr)
 		sr = QUADSPI_SR;
 	} while (sr & QUADSPI_SR_BUSY);
 	status = read_flash_register(STATUS_REG);
-	printf("Status after SECTOR ERASE: 0x%x\n", (unsigned int) status);
+	printf("Status after SECTOR ERASE: 0x%x, %s\n", (unsigned int) status, chip_status(status));
 	do {
 		status = read_flash_register(STATUS_REG);
 	} while (status & 1); /* write in progress */
 	QUADSPI_FCR = 0x1f;
-	printf("Done.\n");
+	printf("Sub-sector Erase complete\n");
 }
+
 void qspi_write_page(uint32_t addr, uint8_t *buf, int len);
 
 /*
@@ -418,9 +440,8 @@ qspi_write_page(uint32_t addr, uint8_t *buf, int len)
 	printf("\n");
 	qspi_enable(FLASH_WRITE_ENABLE);
 	status = read_flash_register(STATUS_REG);
-	printf("\n  Write enable : %s%s%s\n", 
-		console_color(YELLOW), (status & 0x2) ? "Succeeded" : "FAILED",
-		console_color(NONE));
+	printf("Write enable status: %s%s%s\n", 
+		console_color(YELLOW), chip_status(status), console_color(NONE));
 	ccr = QUADSPI_SET(CCR, FMODE, QUADSPI_CCR_FMODE_IWRITE);
 	/* adjusting this to 0 fixed the write issue. */
 	ccr |= QUADSPI_SET(CCR, DCYC, 0); 
@@ -430,8 +451,6 @@ qspi_write_page(uint32_t addr, uint8_t *buf, int len)
 	ccr |= QUADSPI_SET(CCR, ADMODE, QUADSPI_CCR_MODE_1LINE);
 	ccr |= QUADSPI_SET(CCR, ADSIZE, 2);	/* 24 bit address */
 	ccr |= QUADSPI_SET(CCR, DMODE, QUADSPI_CCR_MODE_4LINE);
-	printf("CCR value = 0x%08X\n", (unsigned int) ccr);
-	printf("CR value = 0x%08X\n", (unsigned int) QUADSPI_CR);
 	QUADSPI_DLR = 255;
 	QUADSPI_AR = addr;
 	QUADSPI_CCR = ccr; /* go write a page */
@@ -667,7 +686,6 @@ main(void)
 	hex_dump(TEST_ADDR, test_sector_data, 256);
 	printf("Press a key to continue.\n");
 	(void) console_getc(1);
-	printf("Erasing sector 0\n");
 	qspi_sector_erase(TEST_ADDR);
 	qspi_read_sector(TEST_ADDR, &test_sector_data[0], 256);
 	printf("%sTest sector after erasing%s\n", console_color(MAGENTA), console_color(NONE));
