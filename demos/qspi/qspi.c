@@ -286,7 +286,7 @@ read_flash_register(enum flash_reg r)
 	}
 	ccr |= QUADSPI_SET(CCR, IMODE, QUADSPI_CCR_MODE_1LINE);
 	ccr |= QUADSPI_SET(CCR, DMODE, QUADSPI_CCR_MODE_1LINE);
-	if (r == ENHANCED_VOLATILE_REG) {
+	if (r == NONVOLATILE_REG) {
 		QUADSPI_DLR = 1;	/* 16 bits */
 	} else {
 		QUADSPI_DLR = 0;	/* 8 bits */
@@ -339,7 +339,7 @@ write_flash_register(enum flash_reg r, uint16_t value)
 	}
 	ccr |= QUADSPI_SET(CCR, IMODE, QUADSPI_CCR_MODE_1LINE);
 	ccr |= QUADSPI_SET(CCR, DMODE, QUADSPI_CCR_MODE_1LINE);
-	if (r == ENHANCED_VOLATILE_REG) {
+	if (r == NONVOLATILE_REG) {
 		QUADSPI_DLR = 1;	/* 16 bits */
 	} else {
 		QUADSPI_DLR = 0;	/* 8 bits */
