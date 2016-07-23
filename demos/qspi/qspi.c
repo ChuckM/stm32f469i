@@ -12,7 +12,6 @@
 #include <gfx.h>
 #include "../util/util.h"
 
-void qspi_init(void);
 void qspi_read_id(uint8_t *res);
 
 #define TEST_ADDR	0x1100
