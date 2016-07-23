@@ -81,7 +81,7 @@ main(void)
 	printf("Mapping Flash into the address space ...\n");
 	qspi_map_flash();
 	addr = 0x90000000;
-	printf("Simple speed test Clock : %d Mhz\n", rcc_ahb_frequency / 1000000);
+	printf("Simple speed test Clock : %d Mhz\n", (int) rcc_ahb_frequency / 1000000);
 	t0 = mtime();
 	sum = 0;
 	for (addr = 0x90000000; addr < 0x91000000; addr += 4) {
