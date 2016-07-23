@@ -21,7 +21,6 @@ OBJS = ../util/led.o ../util/console.o ../util/clock.o \
 BINARY = main
 
 LDSCRIPT = ../stm32f469i-discovery.ld
-CLEANFILES += ${OBJS} ${OBJS:%.o=%.d}
 
 CFLAGS = -I../../simple-graphics/include
 LDFLAGS = -L../../simple-graphics/lib
