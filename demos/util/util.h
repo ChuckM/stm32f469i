@@ -53,4 +53,19 @@ void led_init(void);
 #define SDRAM_BASE_ADDRESS ((uint8_t *)(0xC0000000))
 void sdram_init(void);
 
+/* QSPI FLASH utility functions */
+void qspi_init(void);
+/* Read data from FLASH (0 - 16MB worth) */
+int qspi_read_flash(uint32_t addr, uint8_t *buf, int len);
+/* Write date to FLASH (0 - 16MB worth) */
+int qspi_write_flash(uint32_t addr, uint8_t *buf, int len);
+/* Erase a 4K block of FLASH */
+void qspi_erase_block(uint32_t addr);
+/* Map FLASH into the address space */
+void qspi_map_flash(void);
+/* Unmap FLASH from the address space */
+void qspi_unmap_flash(void);
+
+#define FLASH_BASE_ADDRESS ((uint8_t *)(0x90000000))
+
 #endif /* generic header protector */
