@@ -7,15 +7,13 @@
 #include <stdio.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
-#include <libopencm3/stm32/qspi.h>
+#include <libopencm3/stm32/quadspi.h>
 #include <libopencm3/stm32/dma.h>
 #include <gfx.h>
 #include "../util/util.h"
 
 void qspi_init(void);
 void qspi_read_id(uint8_t *res);
-
-#define QSPI_BASE_ADDRESS	((uint8_t *)(0x90000000))
 
 #define TEST_ADDR	0x1100
 
@@ -664,16 +662,17 @@ main(void)
 		printf("%02X", id_string[i]);
 	}
 	printf("\n");
-	printf("Updating volatile register with 10 dummy cycles\n");
-	reg = 0xAB;
-	write_flash_register(VOLATILE_REG, reg);
-
 	/* read the NV Config register */
 	reg = read_flash_register(NONVOLATILE_REG);
 	print_config(reg, "Non-Volatile");
 	reg = read_flash_register(VOLATILE_REG);
 	printf("Volatile Register: 0X%02X\n", (int) reg);
-	print_vol_config(reg, "Volatile (updated with 0xAB)");
+	print_vol_config(reg, "Volatile");
+	printf("Updating volatile register with 10 dummy cycles\n");
+	write_flash_register(VOLATILE_REG, 0xab);
+	reg = read_flash_register(VOLATILE_REG);
+	print_vol_config(reg, "Volatile (updated)");
+
 
 	printf("Press a key to continue\n");
 	(void) console_getc(1);
