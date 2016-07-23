@@ -440,4 +440,11 @@ qspi_map_flash(void)
 void
 qspi_unmap_flash(void)
 {
+	QUADSPI_CR |= QUADSPI_CR_ABORT;	/* tell the system to abort current transactions */
+	/* wait for the abort to complete */
+	while (QUADSPI_CR & QUADSPI_CR_ABORT);
+	qspi_enable(FLASH_RESET_ENABLE);
+	qspi_enable(FLASH_RESET_MEMORY);
+	/* note this is only for the flash chip on the 469I board ! */
+	write_flash_register(VOLATILE_REG, 0xAB);
 }

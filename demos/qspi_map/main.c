@@ -1,5 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <libopencm3/cm3/scb.h>
+#include <libopencm3/cm3/cortex.h>
+#include <libopencm3/stm32/usart.h>
 #include "../util/util.h"
 #include <gfx.h>
 
@@ -14,6 +17,30 @@ static const char HEX_CHARS[16] = {
 	'0','1','2','3','4','5','6','7',
 	'8','9','A','B','C','D','E','F'
 };
+
+void hard_fault_handler(void);
+
+/*
+ * Write a simple hard fault handler. Ideally you won't need it but in my case
+ * while debugging it came in handy. 
+ * If you hit it, you can find out which line of code you were on using addr2line
+ * Example: (with TEST_FAULT defined)
+ *    $ arm-none-eabi-addr2line -e sdram.elf 0x800070e
+ *    <current directory>/sdram.c:374
+ *
+ * Which happens to be the code line just AFTER the one where the assignment is 
+ * made to *addr in the main function.
+ */
+void
+hard_fault_handler(void)
+{
+	printf("                    =HARD FAULT=\n");
+	printf("As you can see if you un-map the flash and try to access it\n");
+	printf("it locks up the system.\n");
+	printf("Press a key to reset\n");
+	while ((USART_SR(USART3) & USART_SR_RXNE) == 0) ;
+	scb_reset_system();
+}
 
 void
 draw_pixel(int x, int y, uint16_t color)
@@ -83,6 +110,23 @@ main(void)
 			if (addr > 0x90ffff00) {
 				addr = 0x90ffff00;
 			}
+		} else if (c == 'u') {
+			printf("Unmap flash start ...\n");
+			qspi_unmap_flash();
+			printf("   ... Unmap done\n");
+			qspi_read_flash(0x200, page, 256);
+			printf("FLASH data read with read_flash():\n");
+			hex_dump(0, page, 256);
+			printf("Re-map the flash\n");
+			qspi_map_flash();
+		} else if (c == 'f') {
+			printf("Demonstrating un-map failure: Unmap flash start ...\n");
+			qspi_unmap_flash();
+			printf("   ... Unmap done\n");
+			qspi_read_flash(0x200, page, 256);
+			printf("FLASH data read with read_flash():\n");
+			hex_dump(0, page, 256);
+			printf("Leave FLASH unmapped, failure in 3 .. 2 .. 1 ...\n");
 		}
 	}
 }
