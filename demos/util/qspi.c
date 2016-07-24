@@ -175,19 +175,28 @@ qspi_read_data(uint8_t *buf, int max_len)
 	int	len;
 
 	len = 0;
-	/* manually transfer data from the QSPI peripheral, this
-	 * loop runs while QUADSPI_SR_BUSY is set. It pulls 4 bytes
-	 * at a time, until the last call, and then it can pull 1, 2
- 	 * or 3 bytes depending on what was left in the FIFO.
+	/* Transfer data from the QSPI peripheral, this
+	 * loop runs while QUADSPI_SR_BUSY is set. It accesses
+	 * the QUAD SPI Data register as a byte to pull one byte
+	 * at a time. 
+	 *
+	 * Originally I started by accessing it as a long and
+	 * re-assembling the bytes (swapping their order) which
+	 * was not very productive.
+	 *
+	 * Note that as of this writing there is an errata that
+	 * in DDR mode you might get extra bytes. So this code
+	 * implements the workaround and keeps reading past 'len'
+	 * but discards extra bytes. 
 	 */
 	do {
 		sr = QUADSPI_SR;
 		if (sr & QUADSPI_SR_FTF) {
+			if (len >= max_len) {
+				continue; /* QUAD SPI Errata work around */
+			}
 			*buf = QUADSPI_BYTE_DR;
 			buf++; len++;
-			if (len >= max_len) {
-				break;
-			}
 		}
 	} while (sr & QUADSPI_SR_BUSY);
 	return (len);
