@@ -107,9 +107,8 @@ qspi_read_data(uint8_t *buf, int max_len)
 
 	len = 0;
 	/* manually transfer data from the QSPI peripheral, this 
-	 * loop runs while QUADSPI_SR_BUSY is set. It pulls 4 bytes
-	 * at a time, until the last call, and then it can pull 1, 2
- 	 * or 3 bytes depending on what was left in the FIFO.
+	 * loop runs while QUADSPI_SR_BUSY is set. It pulls 1 byte
+	 * at a time.
 	 */
 	do {
 		sr = QUADSPI_SR;
