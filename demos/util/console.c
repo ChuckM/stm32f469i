@@ -45,6 +45,9 @@
 
 #define CONSOLE_UART	USART3
 
+/* Default Color state (enabled) */
+static int __console_color_state = 1;
+
 /* This is a ring buffer to holding characters as they are typed
  * it maintains both the place to put the next character received
  * from the UART, and the place where the last character was
@@ -255,6 +258,9 @@ void console_baud(int baud_rate)
 char *
 console_color(TERM_COLOR c)
 {
+	if (__console_color_state == 0) {
+		return "";
+	}
 	switch (c) {
 		case RED:
 			return ("\033[31;40;1m");
@@ -273,4 +279,83 @@ console_color(TERM_COLOR c)
 		default:
 			return ("\033[0m");
 	}
+}
+
+void
+console_color_enable(void)
+{
+	__console_color_state = 1;
+}
+
+void
+console_color_disable(void)
+{
+	__console_color_state = 0;
+}
+
+/*
+ * Convert a string to a number, it accepts base modifiers
+ * so 0x<digits> is hex 0b<digits> is binary, 0<digits> octal.
+ * <digits> and -<digits> decimal.
+ *
+ * Longest string is 0b00000000000000000000000000000000
+ * 35 characters (0b<32 digits>NUL)
+ * 
+ * Assumes:
+ *      - Stops at first non-legal digit in guessed
+ *        base or NUL character.
+ *      - only does signed input on decimal numbers
+ * Returns:
+ *      - 0 even on failure.
+ */
+uint32_t
+console_getnumber (void) {
+	char holding_buf[40];
+	char *buf;
+    uint32_t res = 0;
+    int     base = 10;
+    int     sign_bit = 0;
+    uint8_t digit;
+
+	if (console_gets(holding_buf, sizeof(holding_buf)) == 0) {
+		return 0;
+	}
+
+	holding_buf[sizeof(holding_buf) - 1] = 0; /* forced NUL */
+	buf = &holding_buf[0];
+
+    /* check for different base indicators */
+    if (((*buf >= '1') && (*buf <= '9')) || (*buf == '-')) {
+        if (*buf == '-') {
+            sign_bit = 1;
+            buf++;
+        }
+        base = 10;
+    } else if ((*buf) == '0') {
+        buf++;
+        if (*buf == 'b') {
+            base = 2;
+            buf++;
+        } else if (*buf == 'x') {
+            base = 16;
+            buf++;
+        } else if ((*buf >= '0') && (*buf <= '7')) {
+            base = 8;
+        } else if (*buf == '\000') {
+            return 0;
+        }
+    }
+    while (*buf != '\000') {
+        digit = (*buf > '9') ? ((*buf & 0xdf) - '7') : (*buf - '0');
+        if (((base == 2) && (digit > 1)) ||
+            ((base == 8) && (digit > 7)) ||
+            ((base == 10) && (digit > 9)) ||
+            ((base == 16) && (digit > 15))) {
+            return (sign_bit) ? -res : res;
+        }
+        res *= base;
+        res += digit;
+        buf++;
+    }
+    return (sign_bit) ? -res : res;
 }

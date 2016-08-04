@@ -425,7 +425,7 @@
 #define OTG_GLPMCFG_BESL_GET(x)		OTG_GET(GLPMCFG, BESL, x)
 #define OTG_GLPMCFG_BESL_SET(x)		OTG_SET(GLPMCFG, BESL, x)
 
-XXX OTG_HPTTXFSIZ
+		/* XXX OTG_HPTXFSIZ */
 
 /* Device-mode CSRs */
 /* OTG device control register (OTG_DCTL) */

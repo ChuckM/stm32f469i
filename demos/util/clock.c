@@ -81,10 +81,13 @@ void clock_setup(void)
 	rcc_osc_on(RCC_HSE);
 	rcc_wait_for_osc_ready(RCC_HSE);
 	rcc_set_hpre(RCC_CFGR_HPRE_DIV_NONE);
+	/* Slow AHB bus is 45Mhz */
 	rcc_set_ppre1(RCC_CFGR_PPRE_DIV_4);
+	/* Fast AHB bus is 90Mhz */
 	rcc_set_ppre2(RCC_CFGR_PPRE_DIV_2);
-	rcc_set_main_pll_hse(8, 360, 2, 7);
-	RCC_PLLCFGR |= 2 << 28; /* Set PLL_R to 2 for the DSI Host */
+	/* updated to include PLL R, note M is shared by all PLLs */
+	/* VCO freq = 360Mhz, Sysclk is VCO/PLLP(2) so 180Mhz */
+	rcc_set_main_pll_hse(8, 360, 2, 7, 2);
 	rcc_osc_on(RCC_PLL);
 	rcc_wait_for_osc_ready(RCC_PLL);
 	flash_set_ws(FLASH_ACR_ICE | FLASH_ACR_DCE | FLASH_ACR_LATENCY_5WS);

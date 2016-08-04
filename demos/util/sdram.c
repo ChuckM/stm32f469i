@@ -143,7 +143,7 @@ static struct pin_defines {
 
 /* same parameters as ST used for this DRAM chip */
 static struct sdram_timing timing = {
-	.trcd = 6,		/* RCD Delay */
+	.trcd = 2,		/* RCD Delay */
 	.trp = 2,		/* RP Delay */
 	.twr = 2,		/* Write Recovery Time */
 	.trc = 6,		/* Row Cycle Delay */
@@ -218,10 +218,10 @@ sdram_init(void)
 
 	/*
 	 * Refresh rate, 64ms / 4096 = 15.62uS
-	 * SD Clock is 84Mhz (168/2) so 15.62uS * 84x10e6 = 1312.5 "clocks"
+	 * SD Clock is 90Mhz (180/2) so 15.62uS * 90x10e6 = 1405.8 "clocks"
 	 * Subtract 20 clocks so it will catch up if its held off by CPU access
- 	 * to the same memory 1312 - 20 = 1292 clocks. 
+ 	 * to the same memory 1405.8 - 20 = 1386 clocks. 
 	 */
-	FMC_SDRTR = 1292 << 1;
+	FMC_SDRTR = 1386 << 1;
 	/* et Voila' DRAM memory at 0xC0000000 */
 }
