@@ -350,6 +350,9 @@ gpio_init(void)
 	rcc_periph_clock_enable(RCC_GPIOH);
 	gpio_mode_setup(GPIOH, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO7);
 	gpio_set_output_options(GPIOH, GPIO_OTYPE_OD, GPIO_OSPEED_100MHZ, GPIO7);
+	/* tearing effect signal */
+	rcc_periph_clock_enable(RCC_GPIOJ);
+	gpio_mode_setup(GPIOJ, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO2);
 }
 
 /*
@@ -420,13 +423,13 @@ lcd_init(uint8_t *fb)
 	 * (HSE / PLLM(8) * NDIV(384) = 384Mhz
 	 * It sets its PLLSAI48CLK to 48Mhz VCO/PLLP = 384 / 8 = 48
 	 * It sets the SAI clock to 11.29Mhz 
-	 * It sets the LCD Clock to 76.8Mhz (vary this) (which is divided again by 2 to 38.4Mhz)
+	 * It sets the LCD Clock to 48 Mhz as well (div 2 in PLLSAIR, then another 4 in DKCFGR)
  	 */
 	tmp = RCC_PLLSAICFGR;
 	p = 8;
 	q = 34;
 	n = 384;
-	r = 5;
+	r = 2;
 	rcc_osc_off(RCC_PLLSAICFGR);
 	/* mask out old values (q, p preserved above) */
 	tmp &= ~((RCC_PLLSAICFGR_PLLSAIN_MASK << RCC_PLLSAICFGR_PLLSAIN_SHIFT) |
@@ -442,7 +445,7 @@ lcd_init(uint8_t *fb)
 			((r & RCC_PLLSAICFGR_PLLSAIR_MASK) << RCC_PLLSAICFGR_PLLSAIR_SHIFT));
 
 	RCC_DCKCFGR = (RCC_DCKCFGR & ~(RCC_DCKCFGR_PLLSAIDIVR_MASK << RCC_DCKCFGR_PLLSAIDIVR_SHIFT)) |
-				  (RCC_DCKCFGR_PLLSAIDIVR_DIVR_2 << RCC_DCKCFGR_PLLSAIDIVR_SHIFT);
+				  (RCC_DCKCFGR_PLLSAIDIVR_DIVR_4 << RCC_DCKCFGR_PLLSAIDIVR_SHIFT);
 	RCC_DCKCFGR |= RCC_DCKCFGR_48MSEL; /* 48Mhz clock comes from SAI */
 	rcc_osc_on(RCC_PLLSAI);
 	rcc_wait_for_osc_ready(RCC_PLLSAI);
@@ -615,17 +618,106 @@ lcd_init(uint8_t *fb)
 #define wrap_disable	DSI_WCR &= ~DSI_WCR_DSIEN
 #define wrap_enable		DSI_WCR |= DSI_WCR_DSIEN
 
+void flip(void);
+
+/*
+ * Wait for DSI to be not busy then send it the frame
+ */
+void
+flip(void)
+{
+	int cnt;
+
+	while (DSI_WISR & DSI_WISR_BUSY) ;
+	cnt = 0;
+#if 0
+	while (gpio_get(GPIOJ, GPIO2) == 0) {
+		cnt++;
+	}
+#endif
+	printf("Count = %d\n", cnt);
+	DSI_WCR |= DSI_WCR_LTDCEN;
+}
+
+uint32_t color_bars[] = {
+	0xff0000,
+	0x00ff00,
+	0x0000ff,
+	0xffff00,
+	0x00ffff,
+	0xff00ff,
+	0x7f0000,
+	0x007f00,
+	0x00007f,
+	0x7f7f00,
+	0x007f7f,
+	0x7f007f
+};
+
+void simple_graphics(void);
+
+/*
+ * This fairly contrived bit exploits my simple graphics library
+ * to put something "interesting" on the screen other than the
+ * hacky grids or lines etc. It assumes that gfx_init() has been
+ * called already.
+ */
+void
+simple_graphics(void)
+{
+	/* pick the 7 x 9 font (8 x 12 font box) */
+	gfx_setFont(GFX_FONT_LARGE);
+	gfx_fillScreen(GFX_COLOR_BLACK);
+	gfx_fillRoundRect(0, 0, 800, 480, 15, (uint16_t) GFX_COLOR_WHITE);
+	gfx_drawRoundRect(0, 0, 800, 480, 15, (uint16_t) GFX_COLOR_RED);
+
+	/* Yellow on blue characters and make it 2x bigger (16 x 24 font box) */
+	gfx_setTextColor(GFX_COLOR_YELLOW, GFX_COLOR_BLUE);
+	gfx_setTextSize(2);
+	gfx_fillRoundRect(236, 100, 20*16+7, 24+8, 10, (uint16_t) GFX_COLOR_BLUE);
+	gfx_drawRoundRect(235, 100, 20*16+7, 24+8, 10, (uint16_t) GFX_COLOR_YELLOW);
+
+	gfx_setCursor(236+5, 100+24);
+	gfx_puts((unsigned char *) "Simple Graphics Demo");
+
+	gfx_fillCircle(230, 200, 50, GFX_COLOR_RED);
+	gfx_fillTriangle(310, 250, 360, 150, 410, 250, GFX_COLOR_GREEN);
+	gfx_fillRect(180, 280, 100, 100, GFX_COLOR_BLUE);
+	/* check for proper edge filling on adjacent triangles */
+	gfx_fillTriangle(310, 380, 310, 280, 410, 280, GFX_COLOR_RED);
+	gfx_fillTriangle(310, 380, 410, 280, 410, 380, GFX_COLOR_GREEN);
+
+	gfx_drawLine(180, 264, 410, 264, GFX_COLOR_BLACK);
+	gfx_drawLine(180, 265, 410, 265, GFX_COLOR_BLACK);
+	gfx_drawLine(180, 266, 410, 266, GFX_COLOR_BLACK);
+
+	gfx_drawLine(294, 150, 294, 380, GFX_COLOR_BLACK);
+	gfx_drawLine(295, 150, 295, 380, GFX_COLOR_BLACK);
+	gfx_drawLine(296, 150, 296, 380, GFX_COLOR_BLACK);
+
+	gfx_setTextColor(0, 0);
+	gfx_setTextRotation(GFX_ROT_90);
+	gfx_setCursor(550, 150);
+	gfx_puts((unsigned char *) "Rotated Text");
+	gfx_setFont(GFX_FONT_SMALL);
+	gfx_setCursor(520, 150);
+	gfx_puts((unsigned char *) "And two distinct fonts");
+	gfx_setTextRotation(GFX_ROT_0);
+	gfx_setTextSize(1);
+	gfx_setCursor(180, 420);
+	gfx_puts((unsigned char *) "At scale = 1, small font is hard to read.");
+	
+}
 
 int
 main(void)
 {
-	int r, c, x, y;
+	int t, c, x, y;
 	unsigned int	i;
 	uint32_t	*buf = (uint32_t *)(FB_ADDRESS);
 	uint32_t	col;
 	uint32_t	addr;
 	uint32_t	pixel;
-	uint32_t	old_status;
 
 	uint32_t	*test_buf;
 	uint32_t	test_val;
@@ -639,17 +731,7 @@ main(void)
 	 * background.
 	 */
 	gfx_init(draw_pixel, 800, 480, GFX_FONT_LARGE);
-	gfx_fillScreen(GFX_COLOR_BLACK);
-	gfx_setTextColor(GFX_COLOR_WHITE, GFX_COLOR_BLACK);
-	gfx_setCursor(5, 24);
-	gfx_setTextSize(2);
-	gfx_puts((unsigned char *)"LCD Demo Code");
-	gfx_setTextColor(GFX_COLOR_YELLOW, GFX_COLOR_BLACK);
-	gfx_setCursor(5, 48);
-	gfx_puts((unsigned char *)"If you can read this, we're in good shape!");
-	gfx_setCursor(5, 72);
-	gfx_puts((unsigned char *)"01234567890123456789012345678901234567890123456789012345678901234567890");
-	gfx_drawRoundRect(0,0, 800, 480, 10, GFX_COLOR_GREEN);
+	simple_graphics();
 	
 	lcd_init((uint8_t *)FB_ADDRESS);
 
@@ -660,224 +742,129 @@ main(void)
 	printf("Anything interesting?\n");
 	col = DSI_WCFGR;
 	printf("DSI Wrapper configuration : 0x%08X\n", (unsigned int) col);
-
-	col = DSI_WISR;
-	old_status = col;
-	printf("DSI Wrapper interrupt status register (0x%08X) : ", (unsigned int) col);
-	show_status((col & DSI_WISR_RRS) != 0, "Regulator ready", "Regulator not ready");
-	show_status((col & DSI_WISR_PLLLS) != 0, "PLL Locked", "PLL NOT locked");
-	show_status((col & DSI_WISR_BUSY) == 0, "Idle", "Busy");
-	show_status((col & DSI_WISR_TEIF) == 0, "TE seen", "No TE seen");
-	printf("\n");
-//	DSI_WCR |= DSI_WCR_LTDCEN;
 	printf("DSI_WCFGR = 0x%08X\n", UINT DSI_WCFGR);
 	printf("DSI_LCOLCR = 0x%08X\n", UINT DSI_LCOLCR);
 	
 	while (1) {
 		char xc;
-		uint8_t *bbuf;
 
-//		hex_dump(FB_ADDRESS, (uint8_t *)(FB_ADDRESS), 256);
-		while ((xc = console_getc(0)) == 0) {
-			col = DSI_WISR;
-			if (col != old_status) {
-				printf("Updated status:\n");
-				printf("DSI Wrapper interrupt status register (0x%08X) : ", (unsigned int) col);
-				show_status((col & DSI_WISR_RRS) != 0, "Regulator ready", "Regulator not ready");
-				show_status((col & DSI_WISR_PLLLS) != 0, "PLL Locked", "PLL NOT locked");
-				show_status((col & DSI_WISR_BUSY) == 0, "Idle", "Busy");
-				show_status((col & DSI_WISR_TEIF) == 0, "TE seen", "No TE seen");
-				printf("\n");
-				old_status = col;
-			}
-		}
-
-		switch (xc) {
-			case 'C':
-				printf("Enter fill color: \n");
-				col = console_getnumber();
-				printf("\n");
-				for (i = 0; i < 800 * 480; i++) {
-					*(buf + i) = col;
-				}
-				break;
-			case 'r':
-				printf("Red buffer\n");
-				for (i = 0; i < 800 * 480; i++) {
-					*(buf+i) = 0xffff0000;
-				}
-				break;
-			case 'g':
-				printf("Green buffer\n");
-				for (i = 0; i < 800 * 480; i++) {
-					*(buf+i) = 0xff00ff00;
-				}
-				break;
-			case 'b':
-				printf("Blue buffer\n");
-				for (i = 0; i < 800 * 480; i++) {
-					*(buf+i) = 0xff0000ff;
-				}
-				break;
-			case '1':
-				printf("One test\n");
-				for (i = 0; i < 800 * 480; i++) {
-					*(buf+i) = 0xff000000;
-				}
-				for (r = 100; r < 200; r++) {
-					for (c = 100; c < 200; c++) {
-						*(buf + r*800 + c) = 0xffffff00;
-					}
-				}
-				break;
-			case '2':
-				printf("Two test\n");
-				for (r = 0; r < 480; r++) {
-					for (c = 0; c < 800; c++) {
-						pixel = 0xff000000;
-						if (c & 0x10 ) {
-							pixel = 0xffff0000;
-						}
-						*(buf + r * 800 + c) = pixel;
-					}
-				}
-				break;
-			case '3':
-				printf("Two vertical lines\n");
-				for (r = 0; r < 480; r++) {
-					for (c = 0; c < 800; c++) {
-						
-						if (c < 16) {
-							pixel = 0xffff0000; /* red */
-						} else if ((c > 399) && (c < 416)) {
-							pixel = 0xff00ff00; /* green */
-						} else {
-							pixel = 0xffffffff; /* white */
-						}
-						*(buf + r * 800 + c) = pixel;
-					}
-				}
-				break;
-			case '4':
-				printf("grid\n");
-				for (x = 0; x < 800; x++) {
-					for (y = 0; y < 480; y++) {
-						pixel = 0xff000000;
-						if (((x & 0x1f) == 0) || ((y & 0x1f) == 0)) {
-							pixel = 0xffffffff;
-						}
-						*(buf + y * 800  + x) = pixel;
-					}
-				}
-				break;
-			case 't':
-				printf("GFX Test Output\n");
-				gfx_fillScreen((uint16_t) (0xfff0));
-				gfx_setTextSize(1);
-			    /* test rectangle full screen size */
-			    gfx_drawRoundRect(0, 0, 100, 60, 5, (uint16_t) 0xff01);
-			    gfx_fillRect(17, 3, 66, 14, (uint16_t) 0x0ff2);
-			    gfx_setCursor(19, 13);
-			    /* this text doesn't write the 'background' color */
-			    gfx_setTextColor((uint16_t) 0x3, (uint16_t) 0x0);
-			    gfx_puts((unsigned char *) "Graphics");
-
-			    /* change font size on the fly */
-			    gfx_setFont(GFX_FONT_SMALL);
-			    gfx_setTextColor((uint16_t) 0xf004, (uint16_t) 0xf005);
-				gfx_setCursor(8, 32);
-				/* multiplicative scaling for 'bigger' text */
-				gfx_setTextSize(2);
-				gfx_puts((unsigned char *) "Testing");
-				gfx_setTextSize(1);
-				/* text rotation (four possible angles) */
-				gfx_setTextRotation(GFX_ROT_270);
-				gfx_setCursor(10, 55);
-				gfx_puts((unsigned char *) "Geom");
-				/* draw filled and outline versions of shapes */
-				gfx_drawCircle(16, 38, 5, (uint16_t) 0xf006);
-				gfx_fillRect(25, 33, 10, 10, (uint16_t) 0xf006);
-				gfx_drawTriangle(38, 43, 48, 43, 42, 33, (uint16_t) 0xf007);
-
-				gfx_fillTriangle(11, 55, 21, 55, 16, 45, (uint16_t) 0xf001);
-				gfx_drawRect(25, 45, 10, 10, (uint16_t) 0xf002);
-				gfx_fillCircle(43, 50, 5, (uint16_t) 0xf003);
-
-				/* check for proper edge filling on adjacent triangles */
-   				gfx_fillTriangle(52, 33, 77, 33, 52, 55, (uint16_t) 0xf004);
-				gfx_fillTriangle(52, 55, 77, 33, 77, 55, (uint16_t) 0xf005);
-
-   				/* rotate the other way */
-				gfx_setTextRotation(GFX_ROT_90);
-				gfx_setCursor(80, 33);
-				gfx_puts((unsigned char *) "Test");
-				break;
-
-			case 'i':
-				printf("Increment buffer\n");
-				for (i = 0, bbuf = (uint8_t *)(FB_ADDRESS); i < 800 * 4 * 480; i++) {
-					*(bbuf+i) = (uint8_t) i;
-				}
-				break;
-			case 'e':
-				/* memory explorer */
-				addr = FB_ADDRESS;
-				while (1) {
-					hex_dump(addr, (uint8_t *)(addr), 256);
-					printf("CMD> ");
+		while (1) {
+			xc = console_getc(1);
+			switch (xc) {
+				case 'C':
+					printf("Enter fill color: ");
 					fflush(stdout);
-					c = console_getc(1);
-					if (c == '\033') {
-						break;
-					}
-					switch (c) {
-						case '\r':
-						case 'n':
-							addr += 256;
-							break;
-						case 'p':
-							addr -= 256;
-							break;
-						case 'j':
-							printf("Jump to address: ");
-							fflush(stdout);
-							addr = console_getnumber();
-					}
+					col = console_getnumber();
 					printf("\n");
-					if ((addr+256) > 0xc0ffffff) {
-						addr = 0xc0ffff00;
+					for (i = 0; i < 800 * 480; i++) {
+						*(buf + i) = col;
 					}
-					if ((addr) < 0xc0000000) {
-						addr = 0xc0000000;
+					break;
+				case 'g':
+					printf("Grid\n");
+					printf("Enter grid size : ");
+					fflush(stdout);
+					t = console_getnumber();
+					printf("\n");
+					for (y = 0; y < 480;  y++) {
+						for (x = 0; x < 800; x++) {
+							pixel = 0xff000000; /* black */
+							if (((x % t) == 0) || ((y % t) == 0) ||
+								(x == 799) || (y == 479)) {
+								pixel = 0xffffffff; /* white */
+							}
+							*(buf + y * 800 + x) = pixel;
+						}
 					}
-				}
-				break;
-			case 'm':
-				test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
-				printf("Testing Memory\n");
-				for (test_val = 0; test_val < 1000000; test_val++) {
-					*test_buf++ = test_val;
-				}
-				test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
-				for (test_val = 0; test_val < 1000000; test_val++) {
-					if (*test_buf != test_val) {
-						printf("Memory should have %u, but instead has %u\n", (unsigned int) test_val,
-							(unsigned int) *test_buf);
+					break;
+				case 'c':
+					printf("Color Bars\n");
+					for (y = 0; y < 480; y++) {
+						for (x = 0; x < 800; x++) {
+							pixel = 0;
+							if (y < 400) {
+								pixel = color_bars[(x / 66) % 12];
+							} else if (y > 410) {
+								pixel = (x / 3) & 0xff;
+								pixel = (pixel << 8) | pixel;
+								pixel = (pixel << 8) | pixel;
+							}
+							pixel |= 0xff000000;
+							*(buf + y * 800 + x) = pixel;
+						}
 					}
-					test_buf++;
-				}
-				break;
-			case ' ':
-				printf("Invert buffer\n");
-				for (i = 0; i < 800 * 480; i++) {
-					*(buf+i) ^= 0xffffffff;
-				}
-				break;
-			default:
-				break;
+					break;
+				case 't':
+					/* This is pretty contrived, just to show the primitives */
+					printf("GFX Test Output\n");
+					simple_graphics();
+					break;
+				case 'e':
+					/* memory explorer */
+					addr = FB_ADDRESS;
+					while (1) {
+						hex_dump(addr, (uint8_t *)(addr), 256);
+						printf("CMD> ");
+						fflush(stdout);
+						c = console_getc(1);
+						if (c == '\033') {
+							break;
+						}
+						switch (c) {
+							case 'n':
+								addr += 256;
+								break;
+							case 'p':
+								addr -= 256;
+								break;
+							case 'j':
+								printf("Jump to address: ");
+								fflush(stdout);
+								addr = console_getnumber();
+								break;
+							default:
+								printf("n - next page\n");
+								printf("p - previous page\n");
+								printf("j - jump to specified address (hex entry is allowed)");
+								printf("    legal range 0xc0000000 - 0xc0ffff00\n");
+								break;
+						}
+						printf("\n");
+						if ((addr+256) > 0xc0ffffff) {
+							addr = 0xc0ffff00;
+						}
+						if ((addr) < 0xc0000000) {
+							addr = 0xc0000000;
+						}
+					}
+					break;
+				case 'm':
+					test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
+					printf("Testing Memory\n");
+					for (test_val = 0; test_val < 1000000; test_val++) {
+						*test_buf++ = test_val;
+					}
+					test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
+					for (test_val = 0; test_val < 1000000; test_val++) {
+						if (*test_buf != test_val) {
+							printf("Memory should have %u, but instead has %u\n", (unsigned int) test_val,
+								(unsigned int) *test_buf);
+						}
+						test_buf++;
+					}
+					break;
+				default:
+				case '?':
+					printf("\nFunctions/cmds :\n");
+					printf("    g - create a grid of specified size\n");
+					printf("    C - fill with specified color (0xffffff is white)\n");
+					printf("    t - Show the simple graphics test\n");
+					printf("    c - Show basic color bars\n");
+					printf("    e - Start the memory explorer (esc to exit)\n");
+					printf("    m - Run a simple memory test on SDRAM memory\n");
+					break;
+			}
+			flip();
 		}
-		printf("kicking the LTDC ...\n");
-		DSI_WCR |= DSI_WCR_LTDCEN;
 	}
-				
 }
