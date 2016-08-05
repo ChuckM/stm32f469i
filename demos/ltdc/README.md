@@ -20,10 +20,3 @@ to the LCD. That resulted in a pretty simple state machine
 for initializing the LCD display through the DSI's "Generic"
 packet interface. 
 
-Note this is a checkpoint that doesn't work correctly (the
-screen lights up and stuff is displayed but not the right stuff)
-I'm going to checkpoint this so that I can get back to it
-if I need to, and then try to re-do it as an RGB565 version
-(rather than ARGB8888 like it is currently set up for)
-
-

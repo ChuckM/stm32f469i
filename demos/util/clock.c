@@ -87,7 +87,13 @@ void clock_setup(void)
 	rcc_set_ppre2(RCC_CFGR_PPRE_DIV_2);
 	/* updated to include PLL R, note M is shared by all PLLs */
 	/* VCO freq = 360Mhz, Sysclk is VCO/PLLP(2) so 180Mhz */
-	rcc_set_main_pll_hse(8, 360, 2, 7, 2);
+	rcc_set_main_pll_hse(8, 360, 2, 6, 6);
+	/*
+ 	 * This sets VCO to 360 (HSE/PLLM = 1) * 360 = 360Mhz
+	 * SysClock (VCO/PLLP) to 180
+	 * The PLLQ (PLL48CLK) clock to 60Mhz (360 / 6) (unused)
+	 * The PLLR (PLLDSICLK) to 60Mhz (also unused)
+	 */
 	rcc_osc_on(RCC_PLL);
 	rcc_wait_for_osc_ready(RCC_PLL);
 	flash_set_ws(FLASH_ACR_ICE | FLASH_ACR_DCE | FLASH_ACR_LATENCY_5WS);

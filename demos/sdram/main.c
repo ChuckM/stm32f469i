@@ -142,6 +142,8 @@ int
 main(void)
 {
 	int i;
+	uint32_t test_val;
+	uint32_t *test_buf;
 	uint8_t *addr;
 	char	c;
 
@@ -168,6 +170,22 @@ main(void)
 		printf("CMD> ");
 		fflush(stdout);
 		switch (c = console_getc(1)) {
+		case 't':
+		case 'T':
+			test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
+			printf("Testing Memory\n");
+			for (test_val = 0; test_val < 1000000; test_val++) {
+				*test_buf++ = test_val;
+			}
+			test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
+			for (test_val = 0; test_val < 1000000; test_val++) {
+				if (*test_buf != test_val) {
+					printf("Memory should have %u, but instead has %u\n", (unsigned int) test_val,
+								(unsigned int) *test_buf);
+				}
+				test_buf++;
+			}
+			break;
 		case 'f':
 		case 'F':
 			printf("Fill ");

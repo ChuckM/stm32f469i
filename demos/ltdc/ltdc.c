@@ -9,6 +9,7 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/ltdc.h>
+#include <libopencm3/stm32/usart.h>
 #include <libopencm3/stm32/dsi.h>
 #include <libopencm3/cm3/memorymap.h>
 #include <libopencm3/cm3/scb.h>
@@ -21,27 +22,48 @@ void draw_pixel(int x, int y, uint16_t color);
 
 uint32_t *current_buf = (uint32_t *)(0xc0000000);
 
+void hard_fault_handler(void);
 /*
- * Mapping a 16 bit color to a 24 bit color
- * 15   14  13  12  11  10  09  08  07  06  05  04  03  02  01  00
- * [R4][R3][R2][R1][R0][G5][G4][G3][G2][G1][G0][B4][B3][B2][B1][B0]
+ * Write a simple hard fault handler. Ideally you won't need it but in my case
+ * while debugging it came in handy. 
+ * If you hit it, you can find out which line of code you were on using addr2line
+ * Example: (with TEST_FAULT defined)
+ *    $ arm-none-eabi-addr2line -e sdram.elf 0x800070e
+ *    <current directory>/sdram.c:374
  *
- *  23  22  21  20  19  18  17  16  15  14  13  12  11  10  09  08  07  06  05  04  03  02  01  00
- * [R4][R3][R2][R1][R0][F1][F2][F3][G5][G4][G3][G2][G1][G0][F1][F2][B4][B3][B2][B1][B0][F1][F2][F3] 
- *  0   0   0   0   0   1   1   1   0   0   0   0   0   0   1   1   0   0   0   0   0   1   1   1
+ * Which happens to be the code line just AFTER the one where the assignment is 
+ * made to *addr in the main function.
+ */
+void
+hard_fault_handler(void)
+{
+    printf("                    =HARD FAULT=\n");
+    printf("Press a key to reset\n");
+    while ((USART_SR(USART3) & USART_SR_RXNE) == 0) ;
+    scb_reset_system();
+}
+
+/*
+ * draw_pixel -
+ * 	Converts a RGB565 color to an ARGB888 color and puts
+ *	it into the frame buffer. It is passed as a callback
+ *  to the simple graphics library.
  */
 void
 draw_pixel(int x, int y, uint16_t color)
 {
 	int	r, g, b;
-
+	uint32_t dx, dy;
 	uint32_t *ptr = (uint32_t *)(FB_ADDRESS);
-	uint32_t pixel = 0xff070307;
+	uint32_t pixel;
+
+
+	dx = x; dy = y;
 	r = ((color >> 11) & 0x1f) << 3;
 	g = ((color >> 5) & 0x3f) << 2;
 	b = (color & 0x1f) << 3;
 	pixel = 0xff000000 | (r << 16) | (g << 8) | b;
-	*(ptr + y * 800 + x) = pixel;
+	*(ptr + dy * 800U + dx) = pixel;
 }
 
 /*
@@ -174,11 +196,7 @@ const uint8_t __lcd_init_data[] = {
 	2, 0x3A, 0x77, /* S: ShortRegData38 */
 #endif
 
-/*
- * Debugging original is this: 2, 0x36, 0x60, S: ShortRegData39 
- */
 #ifdef LCD_FORMAT_LANDSCAPE
-
 	2, 0x36, 0x60, /* S: ShortRegData39 */
 	5, 0x2A, 0x00, 0x00, 0x03, 0x1F, /* L: lcdRegData27 */
 	5, 0x2B, 0x00, 0x00, 0x01, 0xDF, /* L: lcdRegData28 */
@@ -199,22 +217,25 @@ void init_display(void);
 #define UINT	(unsigned int)
 
 /*
- * This sends a command through the DSI to the
- * display, either it has 2 parameters which
- * can be sent with a single write, or it
- * has more than 2 in which case we push
- * them into the FIFO and then send a "long"
- * write with the number of args.
+ * This sends a command through the DSI to the display, either it has 2 
+ * parameters which can be sent with a single write, or it has more than 2
+ * in which case we push them into the FIFO and then send a "long" write 
+ * with the number of args.
  *
- * If length is 1 it is a special case
- * we just delay for *args milliseconds.
+ * If length is 1 it is a special case we just delay for *(args) milliseconds.
+ *
+ * If DEBUG_COMMANDS is defined it writes out to the console the 32 bit values
+ * sent to GHCR and GPDR. That can be used to see what was sent over the DSI bus
+ * and compare it to other packages.
  */
 void
 send_command(uint8_t n_arg, const uint8_t *args)
 {
 	int i;
 	uint32_t tmp;
+#ifdef DEBUG_COMMANDS
 	char cmd;
+
 	switch (n_arg) {
 		case 0:
 			cmd = 'E';
@@ -229,7 +250,6 @@ send_command(uint8_t n_arg, const uint8_t *args)
 			cmd = 'L';
 	}
 
-#ifdef DEBUG_COMMANDS
 	printf("    CMD: %c: ", cmd);
 	for (i = 0; i < n_arg-1; i++) {
 		printf("%02X ", (unsigned int) *(args + i));
@@ -293,8 +313,12 @@ send_command(uint8_t n_arg, const uint8_t *args)
 }
 
 /*
- * Implements a really simple state engine to drive the initialization
- * sequence. I've collected all of the commands that are sent (combination
+ * And once you have isolated the packets to send (they are always the
+ * same obviously) you can write a simple wrapper to force feed them
+ * through the generic packet interface and send them off to the display
+ * on the other side.
+ *
+ * I've extracted  all of the commands that are sent (combination
  * of the data sheet and the ST examples) and put them into an array
  * of the form 
  *		[length], [data0], ... [datan],
@@ -316,38 +340,29 @@ init_display(void)
 	}
 }
 
-
 /*
- * PD11 - controller reset
+ * Enable the LCD Reset line.
  * PH7 - xres (reset) on the LCD
- * PF5 - Backlight control (on/off)
- * PG3 - (input) "tearing effect"
  */
 static void
 gpio_init(void)
 {
 	rcc_periph_clock_enable(RCC_GPIOH);
-	rcc_periph_clock_enable(RCC_GPIOG);
-	rcc_periph_clock_enable(RCC_GPIOF);
-	rcc_periph_clock_enable(RCC_GPIOD);
 	gpio_mode_setup(GPIOH, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO7);
 	gpio_set_output_options(GPIOH, GPIO_OTYPE_OD, GPIO_OSPEED_100MHZ, GPIO7);
-	gpio_mode_setup(GPIOD, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO11);
-	gpio_mode_setup(GPIOF, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO5);
-	gpio_mode_setup(GPIOG, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO3);
 }
 
 /*
- * Hsync and Vsync have 1 pre-subtracted because the values in the
- * registers are all 0 based and expect them to be one less than
- * the totals.
+ * These are sort of "fake" parameters for the LTDC. Since it is
+ * Going to force feed one frame to the DSI Wrapper when asked
+ * it doesn't need a lot of timing.
  */
-#define MY_HSYNC	2	/* actually hsync-1 */
+#define MY_HSYNC	2	/* Hsync */
 #define MY_HFP		1
 #define MY_HBP		1
 #define MY_HACT		800
 
-#define MY_VSYNC	2	/* actually vsync-1 */
+#define MY_VSYNC	2	/* Vsync */
 #define MY_VFP		1
 #define MY_VBP		1
 #define MY_VACT		480
@@ -360,23 +375,8 @@ void ltdc_layer_setup(uint8_t *fb);
 void 
 ltdc_layer_setup(uint8_t *fb)
 {
-	/*
-	###
-    const int vsa = 2;
-    const int vbp = 1;
-    const int vfp = 1;
-    const int hsa = 2;
-    const int hbp = 1;
-    const int hfp = 1;
-    const int hact = 800;
-    const int vact = 480;
- 	*/
 
-#if 0
-	/* not sure this works */
-	ltdc_setup_windowing(1, 1, 1, 800, 480);
-#endif
-	/* manual setup of the layer */
+	/* Sets up layer 1 as a "full screen" */
 	LTDC_L1WHPCR = LTDC_SET(LxWHPCR, WHSTPOS, (MY_HSYNC + MY_HBP)) | 
 				   LTDC_SET(LxWHPCR, WHSPPOS, (MY_HSYNC + MY_HBP + MY_HACT - 1));
 	LTDC_L1WVPCR = LTDC_SET(LxWVPCR, WVSTPOS, (MY_VSYNC + MY_VBP)) |
@@ -390,14 +390,15 @@ ltdc_layer_setup(uint8_t *fb)
 	LTDC_L1CFBLNR = 480;
 	LTDC_L1CR = LTDC_LxCR_LEN; /* no color key, no lookup table */
 
-	//LTDC_L2CR = 0;
-
 	/* immediate load from shadow */
 	LTDC_SRCR = LTDC_SRCR_IMR;
+	/* should be good to go */
 }
 
 /*
- * This function initializes the display and clears it
+ * This function does all the heavy lifting. It initializes the DSI Host, the DSI
+ * Wrapper, and the LTDC. Then kicks it off. When it exits the display should be
+ * on and "clear" (all pixels set to black)
  */
 void
 lcd_init(uint8_t *fb)
@@ -414,32 +415,40 @@ lcd_init(uint8_t *fb)
 	printf("done.\n");
 	printf("Set up PLLSAI ... ");
 	fflush(stdout);
-	/* set up the PLLSAI clock for the DSI peripheral */
-	/* Revisit this, why not set it for 384Mhz VCO so that PLLSAI48 can be correct? */
+	/* 
+	 * Set up the PLLSAI clock. This clock sets the VCO to 384Mhz
+	 * (HSE / PLLM(8) * NDIV(384) = 384Mhz
+	 * It sets its PLLSAI48CLK to 48Mhz VCO/PLLP = 384 / 8 = 48
+	 * It sets the SAI clock to 11.29Mhz 
+	 * It sets the LCD Clock to 76.8Mhz (vary this) (which is divided again by 2 to 38.4Mhz)
+ 	 */
 	tmp = RCC_PLLSAICFGR;
-	p = (tmp >> RCC_PLLSAICFGR_PLLSAIP_SHIFT) & RCC_PLLSAICFGR_PLLSAIP_MASK;
-	q = (tmp >> RCC_PLLSAICFGR_PLLSAIQ_SHIFT) & RCC_PLLSAICFGR_PLLSAIQ_MASK;
-	n = 417;
+	p = 8;
+	q = 34;
+	n = 384;
 	r = 5;
 	rcc_osc_off(RCC_PLLSAICFGR);
 	/* mask out old values (q, p preserved above) */
-	tmp &= ~(
-			(RCC_PLLSAICFGR_PLLSAIN_MASK << RCC_PLLSAICFGR_PLLSAIN_SHIFT) |
-			(RCC_PLLSAICFGR_PLLSAIP_MASK << RCC_PLLSAICFGR_PLLSAIP_SHIFT) |
-			(RCC_PLLSAICFGR_PLLSAIQ_MASK << RCC_PLLSAICFGR_PLLSAIQ_SHIFT) |
-			(RCC_PLLSAICFGR_PLLSAIR_MASK << RCC_PLLSAICFGR_PLLSAIR_SHIFT));
+	tmp &= ~((RCC_PLLSAICFGR_PLLSAIN_MASK << RCC_PLLSAICFGR_PLLSAIN_SHIFT) |
+			 (RCC_PLLSAICFGR_PLLSAIP_MASK << RCC_PLLSAICFGR_PLLSAIP_SHIFT) |
+			 (RCC_PLLSAICFGR_PLLSAIQ_MASK << RCC_PLLSAICFGR_PLLSAIQ_SHIFT) |
+			 (RCC_PLLSAICFGR_PLLSAIR_MASK << RCC_PLLSAICFGR_PLLSAIR_SHIFT));
+
 	/* store new values */
 	RCC_PLLSAICFGR |= (
 			((n & RCC_PLLSAICFGR_PLLSAIN_MASK) << RCC_PLLSAICFGR_PLLSAIN_SHIFT) |
 			((p & RCC_PLLSAICFGR_PLLSAIP_MASK) << RCC_PLLSAICFGR_PLLSAIP_SHIFT) |
 			((q & RCC_PLLSAICFGR_PLLSAIQ_MASK) << RCC_PLLSAICFGR_PLLSAIQ_SHIFT) |
 			((r & RCC_PLLSAICFGR_PLLSAIR_MASK) << RCC_PLLSAICFGR_PLLSAIR_SHIFT));
+
 	RCC_DCKCFGR = (RCC_DCKCFGR & ~(RCC_DCKCFGR_PLLSAIDIVR_MASK << RCC_DCKCFGR_PLLSAIDIVR_SHIFT)) |
 				  (RCC_DCKCFGR_PLLSAIDIVR_DIVR_2 << RCC_DCKCFGR_PLLSAIDIVR_SHIFT);
+	RCC_DCKCFGR |= RCC_DCKCFGR_48MSEL; /* 48Mhz clock comes from SAI */
 	rcc_osc_on(RCC_PLLSAI);
 	rcc_wait_for_osc_ready(RCC_PLLSAI);
 	printf(" done.\n");
 
+	/* Turn on the peripheral clocks for LTDC and DSI */
 	rcc_periph_clock_enable(RCC_DSI);
 	rcc_periph_clock_enable(RCC_LTDC);
 
@@ -457,24 +466,36 @@ lcd_init(uint8_t *fb)
 	fflush(stdout);
 	printf("%s\n", ((DSI_CR & 1) == 0) ? "OFF" : "ON");
 	
+	/*
+	 * This configures the clock to the PHY. It is set
+	 * as (((HSE / input divisor) * NDIV) / output divisor)
+	 * HSE is 8Mhz, input divisor is 2, output divisor is 1
+	 * so ((8 / 2) * 125) / 1) = 500Mhz
+	 */
 	DSI_WRPCR |= DSI_SET(WRPCR, NDIV, 125) |
 			    DSI_SET(WRPCR, IDF, DSI_WRPCR_IDF_DIV_2) |
-				DSI_SET(WRPCR, ODF, DSI_WRPCR_IDF_DIV_1);
+				DSI_SET(WRPCR, ODF, DSI_WRPCR_ODF_DIV_1);
 	DSI_WRPCR |= DSI_WRPCR_PLLEN;
 	while ((DSI_WISR & DSI_WISR_PLLLS) == 0) ;
 	printf("    Done.\n");
 
 	printf("    Setup DSI PHY part ...");
 	fflush(stdout);
-	/* program the PHY */
-	/* When should one enable these? Before ? After? Mid point? */
- 	/* The ST code starts of by enabling them */
+	/* Now that the PHY has power (regulator) and clock
+	 * we can program it.
+ 	 * The ST code starts of by enabling them so I do too.
+	 */
 	DSI_PCTLR = DSI_PCTLR_CKE | DSI_PCTLR_DEN;
 	DSI_CLCR = DSI_CLCR_DPCC;
 	DSI_PCONFR |= DSI_SET(PCONFR, NL, DSI_PCONFR_NL_2LANE); /* two lanes */
 
+	/* Set the the "escape" clock divisor, RM0386 says it's 20Mhz 
+	 * maximum, and it is fed by the Phy clock / 8 (62.5Mhz) so we
+ 	 * divide by 4 to make it 15.6Mhz (which is < 20Mhz)
+	 */
 	DSI_CCR = DSI_SET(CCR, TXECKDIV, 4);
 	DSI_WPCR0 &= ~(DSI_MASK(WPCR0, UIX4));
+
 	/* 500Mhz Phy clock, bit period is 8 * .25nS */
 	DSI_WPCR0 |= DSI_SET(WPCR0, UIX4, 8);
 	printf(" done\n");
@@ -486,17 +507,24 @@ lcd_init(uint8_t *fb)
 	
 	printf("Put DSI into Command mode ...\n");
 	DSI_MCR |= DSI_MCR_CMDM;
+	/* 
+	 * Set the color mode in two places, in the wrapper device (WFCGR)
+	 * and in the DSI Host (LCOLCR)
+	 * DSI Wrapper color mode (this is LTDC -> DSI Host)
+	 */
 	DSI_WCFGR = DSI_WCFGR_DSIM | DSI_SET(WCFGR, COLMUX, 5); 
-	/* color mode (this is DSI -> display) of RGB 888 */
+	/* DSI host color mode (this is DSI -> display) of RGB 888 */
 	DSI_LCOLCR = 5; /* RGB888 mode */
 
-	DSI_LVCIDR = 0; /* channel 0 */
-	DSI_GVCIDR = 0; /* channel 0 ### */
+	/* We want to send commands on channel 0 */
+	DSI_LVCIDR = 0; /* LTDC uses channel 0 */
+	DSI_GVCIDR = 0; /* Generic packets also use channel 0 */
 
 
-	/* command size is one line of pixels (800 in this case) */
+	/* Largest command size is one line of pixels (800 in this case) */
 	DSI_LCCR |= DSI_SET(LCCR, CMDSIZE, 800); 
 	DSI_CMCR |= DSI_CMCR_TEARE;
+
 	/* enable interrupts for tear and refresh */
 	/* xxx TODO: verify nvic has the dsi and ltdc interrupt
 	   vectors populated.
@@ -504,54 +532,78 @@ lcd_init(uint8_t *fb)
 		DSI_WIER_ERIE 
     */
 	printf("Done\n");
+
 	/* set all the commands to be low power type */
 	DSI_CMCR |= DSI_CMCR_DLWTX | DSI_CMCR_DSR0TX | DSI_CMCR_DSW1TX | DSI_CMCR_DSW0TX |
 				DSI_CMCR_GLWTX | DSI_CMCR_GSR2TX | DSI_CMCR_GSR1TX | DSI_CMCR_GSR0TX |
 				DSI_CMCR_GSW2TX | DSI_CMCR_GSW1TX | DSI_CMCR_GSW0TX ;
-	/* Note MRDPS and ARE are taken from the initialization structure in the ST code
-	 * but they are never set. Since the structure is declared in the BSS it is
-	 * supposed to be cleared but this is a bug waiting to happen on ST's part
- 	 */
 
-
-	/* Start initializing the LTDC */
+	/* 
+	 * Now the DSI Host is pretty much set up, so we need to initialize the LTDC.
+	 * Note that if the DSI Wrapper is enabled (Bit DSIEN in DSI_WCR) you can't
+	 * access the LTDC. So we have to work on it with the wrapper disabled
+	 */
 	printf("Initializing the LTDC ... ");
 	fflush(stdout);
 	/* set all polarity bits to 0 ### */
 	LTDC_GCR &= ~(LTDC_GCR_HSPOL | LTDC_GCR_VSPOL | LTDC_GCR_DEPOL | LTDC_GCR_PCPOL);
-	/* TODO docs say this should be sync - 1 (so 0 ?) */
-	LTDC_SSCR = (MY_HSYNC) << 16 | MY_VSYNC; /* Horiz / Vertical sync are '1' */
-	/* TODO: this then trickles down, is it 1  + 1 - 1 = 1, or 2 ? */
+	LTDC_SSCR = (MY_HSYNC - 1) << 16 | (MY_VSYNC - 1);
 	LTDC_BPCR = LTDC_SET(BPCR, AHBP, (MY_HSYNC + MY_HBP - 1)) |
 				LTDC_SET(BPCR, AVBP, (MY_VSYNC + MY_VBP - 1)) ;
 	LTDC_AWCR = LTDC_SET(AWCR, AAW, (MY_HSYNC + MY_HBP + MY_HACT - 1)) | 
 			    LTDC_SET(AWCR, AAH, (MY_VSYNC + MY_VBP + MY_VACT - 1));
 	LTDC_TWCR = LTDC_SET(TWCR, TOTALW, (MY_HSYNC + MY_HFP + MY_HACT + MY_HBP - 1)) | 
 				LTDC_SET(TWCR, TOTALH, (MY_VSYNC + MY_VFP + MY_VACT + MY_VBP - 1));
-	LTDC_BCCR = 0xff8080; /* non-black */
-	/* xxx TODO: enable interrupts? 
-		Transfer error and framing error (LTDC_IER_TERRIE, LTDC_IER_FUIE)
-	*/
+	/*
+	 * Default background color is non-black so you can see if if your layer setup
+	 * doesn't completely cover the display.
+	 */
+	LTDC_BCCR = 0xff8080;
+
 	/* Turn it on */
 	LTDC_GCR |= LTDC_GCR_LTDCEN;
 	printf("Done\n");
+	
+	/*
+	 * Now program the Layer 1 registers to show our frame buffer (which is
+	 * the first 1.5MB of SDRAM) as an 800 x 480 x 4 byte ARGB888 buffer.
+	 */
 	ltdc_layer_setup(fb);
 
-	/* now turn on the DSI Wrapper */
+	/* now turn on the DSI Host and the DSI  Wrapper */
 	DSI_CR |= DSI_CR_EN;
 	DSI_WCR |= DSI_WCR_DSIEN;
-	/* At this point we should be plumbed, and the real work begins to initialize the display
-	itself */
+
+	/* 
+	 * At this point we have the DSI Host, the DSI Phy,  the LTDC, and the
+	 * DSI wrapper all set up. So we can now send commands through this
+	 * "pipe" into the display connected to the DSI host. (this is very
+	 * similar to other systems where you send all the setup commands
+	 * through a SPI port. In this case though you have to use the
+	 * Generic Packet interface.
+	 */
 	printf("Starting initialization of display ...\n ");
 	fflush(stdout);
 	init_display();
 	printf("\ndone.\n");
+
 	/* reset the commands to all be high power only now? */
 	DSI_CMCR &= ~( DSI_CMCR_DLWTX | DSI_CMCR_DSR0TX | DSI_CMCR_DSW1TX | DSI_CMCR_DSW0TX |
 				   DSI_CMCR_GLWTX | DSI_CMCR_GSR2TX | DSI_CMCR_GSR1TX | DSI_CMCR_GSR0TX |
 				   DSI_CMCR_GSW2TX | DSI_CMCR_GSW1TX | DSI_CMCR_GSW0TX ) ;
 	DSI_PCR |= DSI_PCR_BTAE; /* flow control */
-	DSI_WCR |= DSI_WCR_LTDCEN; /* Turn on the LTDC (display should be lit) */
+
+	/* And now when you tell the DSI Wrapper to enable the LTDC it 
+	 * un "pauses" it and the LTDC generates one frame of display.
+	 * that frame is captured by the wrapper and fed into the LCD
+	 * display and the LTDC is re-paused. (this is Adapted Command
+	 * Mode (as opposed to "video" mode).
+	 */
+	DSI_WCR |= DSI_WCR_LTDCEN;
+	/* this point what ever is in the frame buffer should be on
+	 * the display. You can change the frame buffer but until you
+	 * write this bit again it won't be loaded on to the display
+	 */
 }
 
 
@@ -559,6 +611,7 @@ lcd_init(uint8_t *fb)
 			{ printf("%s%s%s, ", console_color(GREEN), ok, console_color(NONE)); } else \
 			{ printf("%s%s%s, ", console_color(YELLOW), notok, console_color(NONE)); }
 
+/* Macros to turn off and on the DSI Wrapper */
 #define wrap_disable	DSI_WCR &= ~DSI_WCR_DSIEN
 #define wrap_enable		DSI_WCR |= DSI_WCR_DSIEN
 
@@ -566,12 +619,17 @@ lcd_init(uint8_t *fb)
 int
 main(void)
 {
-	int i, r, c, x, y;
+	int r, c, x, y;
+	unsigned int	i;
 	uint32_t	*buf = (uint32_t *)(FB_ADDRESS);
 	uint32_t	col;
 	uint32_t	addr;
 	uint32_t	pixel;
 	uint32_t	old_status;
+
+	uint32_t	*test_buf;
+	uint32_t	test_val;
+
 
 	fprintf(stderr, "LTDC/DSI Demo Program\n");
 	gpio_init();
@@ -580,22 +638,22 @@ main(void)
 	 * image frame buffer with a white grid on a black
 	 * background.
 	 */
-	gfx_init(draw_pixel, 320, 240, GFX_FONT_LARGE);
-	gfx_fillScreen(GFX_COLOR_WHITE);
-	gfx_setTextColor(GFX_COLOR_BLUE, GFX_COLOR_BLACK);
-	gfx_setCursor(100, 100);
+	gfx_init(draw_pixel, 800, 480, GFX_FONT_LARGE);
+	gfx_fillScreen(GFX_COLOR_BLACK);
+	gfx_setTextColor(GFX_COLOR_WHITE, GFX_COLOR_BLACK);
+	gfx_setCursor(5, 24);
 	gfx_setTextSize(2);
-	gfx_puts((unsigned char *)"What the FUCK is Going On!!!");
-	gfx_fillRoundRect(50, 50, 50, 50, 5, GFX_COLOR_GREEN);
+	gfx_puts((unsigned char *)"LCD Demo Code");
+	gfx_setTextColor(GFX_COLOR_YELLOW, GFX_COLOR_BLACK);
+	gfx_setCursor(5, 48);
+	gfx_puts((unsigned char *)"If you can read this, we're in good shape!");
+	gfx_setCursor(5, 72);
+	gfx_puts((unsigned char *)"01234567890123456789012345678901234567890123456789012345678901234567890");
+	gfx_drawRoundRect(0,0, 800, 480, 10, GFX_COLOR_GREEN);
 	
-	
-
 	lcd_init((uint8_t *)FB_ADDRESS);
 
-/*
-	ltdc_layer_setup((uint8_t *)buf);
-	wrap_enable;
-*/
+	/* Note you can't adjust the LTDC if the DSI Wrapper is enabled! */
 	DSI_WCR |= (DSI_WCR_DSIEN | DSI_WCR_LTDCEN);
 
 	
@@ -635,6 +693,14 @@ main(void)
 		}
 
 		switch (xc) {
+			case 'C':
+				printf("Enter fill color: \n");
+				col = console_getnumber();
+				printf("\n");
+				for (i = 0; i < 800 * 480; i++) {
+					*(buf + i) = col;
+				}
+				break;
 			case 'r':
 				printf("Red buffer\n");
 				for (i = 0; i < 800 * 480; i++) {
@@ -704,20 +770,21 @@ main(void)
 					}
 				}
 				break;
-			case '5':
-				printf("GFX Failures\n");
-				gfx_fillScreen((uint16_t) (0xffff));
+			case 't':
+				printf("GFX Test Output\n");
+				gfx_fillScreen((uint16_t) (0xfff0));
+				gfx_setTextSize(1);
 			    /* test rectangle full screen size */
-			    gfx_drawRoundRect(0, 0, 100, 60, 5, (uint16_t) 0xff00);
-			    gfx_fillRect(17, 3, 66, 14, (uint16_t) 0x0ff0);
+			    gfx_drawRoundRect(0, 0, 100, 60, 5, (uint16_t) 0xff01);
+			    gfx_fillRect(17, 3, 66, 14, (uint16_t) 0x0ff2);
 			    gfx_setCursor(19, 13);
 			    /* this text doesn't write the 'background' color */
-			    gfx_setTextColor((uint16_t) 0x0, (uint16_t) 0x0);
+			    gfx_setTextColor((uint16_t) 0x3, (uint16_t) 0x0);
 			    gfx_puts((unsigned char *) "Graphics");
 
 			    /* change font size on the fly */
 			    gfx_setFont(GFX_FONT_SMALL);
-			    gfx_setTextColor((uint16_t) GFX_COLOR_YELLOW, (uint16_t) GFX_COLOR_CYAN);
+			    gfx_setTextColor((uint16_t) 0xf004, (uint16_t) 0xf005);
 				gfx_setCursor(8, 32);
 				/* multiplicative scaling for 'bigger' text */
 				gfx_setTextSize(2);
@@ -728,17 +795,17 @@ main(void)
 				gfx_setCursor(10, 55);
 				gfx_puts((unsigned char *) "Geom");
 				/* draw filled and outline versions of shapes */
-				gfx_drawCircle(16, 38, 5, (uint16_t) GFX_COLOR_MAGENTA);
-				gfx_fillRect(25, 33, 10, 10, (uint16_t) GFX_COLOR_YELLOW);
-				gfx_drawTriangle(38, 43, 48, 43, 42, 33, (uint16_t) GFX_COLOR_BLUE);
+				gfx_drawCircle(16, 38, 5, (uint16_t) 0xf006);
+				gfx_fillRect(25, 33, 10, 10, (uint16_t) 0xf006);
+				gfx_drawTriangle(38, 43, 48, 43, 42, 33, (uint16_t) 0xf007);
 
-				gfx_fillTriangle(11, 55, 21, 55, 16, 45, (uint16_t) GFX_COLOR_RED);
-				gfx_drawRect(25, 45, 10, 10, (uint16_t) GFX_COLOR_GREEN);
-				gfx_fillCircle(43, 50, 5, (uint16_t) GFX_COLOR_GREY);
+				gfx_fillTriangle(11, 55, 21, 55, 16, 45, (uint16_t) 0xf001);
+				gfx_drawRect(25, 45, 10, 10, (uint16_t) 0xf002);
+				gfx_fillCircle(43, 50, 5, (uint16_t) 0xf003);
 
 				/* check for proper edge filling on adjacent triangles */
-   				gfx_fillTriangle(52, 33, 77, 33, 52, 55, (uint16_t) GFX_COLOR_RED);
-				gfx_fillTriangle(52, 55, 77, 33, 77, 55, (uint16_t) GFX_COLOR_GREEN);
+   				gfx_fillTriangle(52, 33, 77, 33, 52, 55, (uint16_t) 0xf004);
+				gfx_fillTriangle(52, 55, 77, 33, 77, 55, (uint16_t) 0xf005);
 
    				/* rotate the other way */
 				gfx_setTextRotation(GFX_ROT_90);
@@ -753,7 +820,7 @@ main(void)
 				}
 				break;
 			case 'e':
-				/* memory exporer */
+				/* memory explorer */
 				addr = FB_ADDRESS;
 				while (1) {
 					hex_dump(addr, (uint8_t *)(addr), 256);
@@ -785,18 +852,26 @@ main(void)
 					}
 				}
 				break;
+			case 'm':
+				test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
+				printf("Testing Memory\n");
+				for (test_val = 0; test_val < 1000000; test_val++) {
+					*test_buf++ = test_val;
+				}
+				test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
+				for (test_val = 0; test_val < 1000000; test_val++) {
+					if (*test_buf != test_val) {
+						printf("Memory should have %u, but instead has %u\n", (unsigned int) test_val,
+							(unsigned int) *test_buf);
+					}
+					test_buf++;
+				}
+				break;
 			case ' ':
 				printf("Invert buffer\n");
 				for (i = 0; i < 800 * 480; i++) {
 					*(buf+i) ^= 0xffffffff;
 				}
-				break;
-			case 't':
-				printf("Test Pattern ...\n");
-#if 0
-				DSI_MCR = 0;
-				DSI_VMCR |= DSI_VMCR_PGE;
-#endif
 				break;
 			default:
 				break;

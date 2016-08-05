@@ -1,0 +1,307 @@
+[33;40;1mLTDC/DSI Demo Program
+[0mReset LCD ... done.
+Set up PLLSAI ...  done.
+Start DSI initialization...
+    Turn on the DSI regulator ...  done.
+    Setting up the PHY PLL ...
+    Verify DSI is off ... OFF
+    Done.
+    Setup DSI PHY part ... done
+Initialization done
+Put DSI into Command mode ...
+Done
+Initializing the LTDC ... Done
+Starting initialization of display ...
+     CMD: S: 00 00
+        ... GHCR: 0x00000015
+    CMD: L: FF 80 09 01
+        ... GPDR: 0x010980FF
+        ... GHCR: 0x00000439 
+    CMD: S: 00 80
+        ... GHCR: 0x00800015
+    CMD: L: FF 80 09
+        ... GPDR: 0x000980FF
+        ... GHCR: 0x00000339 
+    CMD: S: 00 80
+        ... GHCR: 0x00800015
+    CMD: S: C4 30
+        ... GHCR: 0x0030C415
+    CMD: D: 0A
+    CMD: S: 00 8A
+        ... GHCR: 0x008A0015
+    CMD: S: C4 40
+        ... GHCR: 0x0040C415
+    CMD: D: 0A
+    CMD: S: 00 B1
+        ... GHCR: 0x00B10015
+    CMD: S: C5 A9
+        ... GHCR: 0x00A9C515
+    CMD: S: 00 91
+        ... GHCR: 0x00910015
+    CMD: S: C5 34
+        ... GHCR: 0x0034C515
+    CMD: S: 00 B4
+        ... GHCR: 0x00B40015
+    CMD: S: C0 50
+        ... GHCR: 0x0050C015
+    CMD: S: 00 00
+        ... GHCR: 0x00000015
+    CMD: S: D9 4E
+        ... GHCR: 0x004ED915
+    CMD: S: 00 81
+        ... GHCR: 0x00810015
+    CMD: S: C1 66
+        ... GHCR: 0x0066C115
+    CMD: S: 00 A1
+        ... GHCR: 0x00A10015
+    CMD: S: C1 08
+        ... GHCR: 0x0008C115
+    CMD: S: 00 92
+        ... GHCR: 0x00920015
+    CMD: S: C5 01
+        ... GHCR: 0x0001C515
+    CMD: S: 00 95
+        ... GHCR: 0x00950015
+    CMD: S: C5 34
+        ... GHCR: 0x0034C515
+    CMD: S: 00 00
+        ... GHCR: 0x00000015
+    CMD: L: D8 79 79
+        ... GPDR: 0x007979D8
+        ... GHCR: 0x00000339 
+    CMD: S: 00 94
+        ... GHCR: 0x00940015
+    CMD: S: C5 33
+        ... GHCR: 0x0033C515
+    CMD: S: 00 A3
+        ... GHCR: 0x00A30015
+    CMD: S: C0 1B
+        ... GHCR: 0x001BC015
+    CMD: S: 00 82
+        ... GHCR: 0x00820015
+    CMD: S: C5 83
+        ... GHCR: 0x0083C515
+    CMD: S: 00 81
+        ... GHCR: 0x00810015
+    CMD: S: C4 83
+        ... GHCR: 0x0083C415
+    CMD: S: 00 A1
+        ... GHCR: 0x00A10015
+    CMD: S: C1 0E
+        ... GHCR: 0x000EC115
+    CMD: S: 00 A6
+        ... GHCR: 0x00A60015
+    CMD: L: B3 00 01
+        ... GPDR: 0x000100B3
+        ... GHCR: 0x00000339 
+    CMD: S: 00 80
+        ... GHCR: 0x00800015
+    CMD: L: CE 85 01 00 84 01 00
+        ... GPDR: 0x000185CE
+        ... GPDR: 0x00000184
+        ... GHCR: 0x00000739 
+    CMD: S: 00 A0
+        ... GHCR: 0x00A00015
+    CMD: L: CE 18 04 03 39 00 00 00 18 03 03 3A 00 00 00
+        ... GPDR: 0x030418CE
+        ... GPDR: 0x00000039
+        ... GPDR: 0x3A030318
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00000F39 
+    CMD: S: 00 B0
+        ... GHCR: 0x00B00015
+    CMD: L: CE 18 02 03 3B 00 00 00 18 01 03 3C 00 00 00
+        ... GPDR: 0x030218CE
+        ... GPDR: 0x0000003B
+        ... GPDR: 0x3C030118
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00000F39 
+    CMD: S: 00 C0
+        ... GHCR: 0x00C00015
+    CMD: L: CF 01 01 20 20 00 00 01 02 00 00
+        ... GPDR: 0x200101CF
+        ... GPDR: 0x01000020
+        ... GPDR: 0x00000002
+        ... GHCR: 0x00000B39 
+    CMD: S: 00 D0
+        ... GHCR: 0x00D00015
+    CMD: S: CF 00
+        ... GHCR: 0x0000CF15
+    CMD: S: 00 80
+        ... GHCR: 0x00800015
+    CMD: L: CB 00 00 00 00 00 00 00 00 00 00
+        ... GPDR: 0x000000CB
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00000B39 
+    CMD: S: 00 90
+        ... GHCR: 0x00900015
+    CMD: L: CB 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        ... GPDR: 0x000000CB
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00001039 
+    CMD: S: 00 A0
+        ... GHCR: 0x00A00015
+    CMD: L: CB 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        ... GPDR: 0x000000CB
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00001039 
+    CMD: S: 00 B0
+        ... GHCR: 0x00B00015
+    CMD: L: CB 00 00 00 00 00 00 00 00 00 00
+        ... GPDR: 0x000000CB
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00000B39 
+    CMD: S: 00 C0
+        ... GHCR: 0x00C00015
+    CMD: L: CB 00 04 04 04 04 04 00 00 00 00 00 00 00 00 00
+        ... GPDR: 0x040400CB
+        ... GPDR: 0x00040404
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00001039 
+    CMD: S: 00 D0
+        ... GHCR: 0x00D00015
+    CMD: L: CB 00 00 00 00 00 00 04 04 04 04 04 00 00 00 00
+        ... GPDR: 0x000000CB
+        ... GPDR: 0x04000000
+        ... GPDR: 0x04040404
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00001039 
+    CMD: S: 00 E0
+        ... GHCR: 0x00E00015
+    CMD: L: CB 00 00 00 00 00 00 00 00 00 00
+        ... GPDR: 0x000000CB
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00000B39 
+    CMD: S: 00 F0
+        ... GHCR: 0x00F00015
+    CMD: L: CB FF FF FF FF FF FF FF FF FF FF
+        ... GPDR: 0xFFFFFFCB
+        ... GPDR: 0xFFFFFFFF
+        ... GPDR: 0x00FFFFFF
+        ... GHCR: 0x00000B39 
+    CMD: S: 00 80
+        ... GHCR: 0x00800015
+    CMD: L: CC 00 26 09 0B 01 25 00 00 00 00
+        ... GPDR: 0x092600CC
+        ... GPDR: 0x0025010B
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00000B39 
+    CMD: S: 00 90
+        ... GHCR: 0x00900015
+    CMD: L: CC 00 00 00 00 00 00 00 00 00 00 00 26 0A 0C 02
+        ... GPDR: 0x000000CC
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GPDR: 0x020C0A26
+        ... GHCR: 0x00001039 
+    CMD: S: 00 A0
+        ... GHCR: 0x00A00015
+    CMD: L: CC 25 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        ... GPDR: 0x000025CC
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00001039 
+    CMD: S: 00 B0
+        ... GHCR: 0x00B00015
+    CMD: L: CC 00 25 0C 0A 02 26 00 00 00 00
+        ... GPDR: 0x0C2500CC
+        ... GPDR: 0x0026020A
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00000B39 
+    CMD: S: 00 C0
+        ... GHCR: 0x00C00015
+    CMD: L: CC 00 00 00 00 00 00 00 00 00 00 00 25 0B 09 01
+        ... GPDR: 0x000000CC
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GPDR: 0x01090B25
+        ... GHCR: 0x00001039 
+    CMD: S: 00 D0
+        ... GHCR: 0x00D00015
+    CMD: L: CC 26 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+        ... GPDR: 0x000026CC
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GPDR: 0x00000000
+        ... GHCR: 0x00001039 
+    CMD: S: 00 81
+        ... GHCR: 0x00810015
+    CMD: S: C5 66
+        ... GHCR: 0x0066C515
+    CMD: S: 00 B6
+        ... GHCR: 0x00B60015
+    CMD: S: F5 06
+        ... GHCR: 0x0006F515
+    CMD: S: 00 00
+        ... GHCR: 0x00000015
+    CMD: L: FF FF FF FF
+        ... GPDR: 0xFFFFFFFF
+        ... GHCR: 0x00000439 
+    CMD: S: 00 00
+        ... GHCR: 0x00000015
+    CMD: S: 00 00
+        ... GHCR: 0x00000015
+    CMD: L: E1 00 09 0F 0E 07 10 0B 0A 04 07 0B 08 0F 10 0A 01
+        ... GPDR: 0x0F0900E1
+        ... GPDR: 0x0B10070E
+        ... GPDR: 0x0B07040A
+        ... GPDR: 0x0A100F08
+        ... GPDR: 0x00000001
+        ... GHCR: 0x00001139 
+    CMD: S: 00 00
+        ... GHCR: 0x00000015
+    CMD: L: E2 00 09 0F 0E 07 10 0B 0A 04 07 0B 08 0F 10 0A 01
+        ... GPDR: 0x0F0900E2
+        ... GPDR: 0x0B10070E
+        ... GPDR: 0x0B07040A
+        ... GPDR: 0x0A100F08
+        ... GPDR: 0x00000001
+        ... GHCR: 0x00001139 
+    CMD: S: 11 00
+        ... GHCR: 0x00001115
+    CMD: D: 78
+    CMD: S: 3A 77
+        ... GHCR: 0x00773A15
+    CMD: S: 36 60
+        ... GHCR: 0x00603615
+    CMD: L: 2A 00 00 03 1F
+        ... GPDR: 0x0300002A
+        ... GPDR: 0x0000001F
+        ... GHCR: 0x00000539 
+    CMD: L: 2B 00 00 01 DF
+        ... GPDR: 0x0100002B
+        ... GPDR: 0x000000DF
+        ... GHCR: 0x00000539 
+    CMD: S: 51 7F
+        ... GHCR: 0x007F5115
+    CMD: S: 53 2C
+        ... GHCR: 0x002C5315
+    CMD: S: 55 02
+        ... GHCR: 0x00025515
+    CMD: S: 5E FF
+        ... GHCR: 0x00FF5E15
+    CMD: S: 29 00
+        ... GHCR: 0x00002915
+    CMD: S: 00 00
+        ... GHCR: 0x00000015
+    CMD: S: 2C 00
+        ... GHCR: 0x00002C15
+
+done.
+Anything interesting?
+DSI Wrapper configuration : 0x0000000B
+DSI Wrapper interrupt status register (0x00003304) : [32;40;1mRegulator ready[0m, [32;40;1mPLL Locked[0m, [33;40;1mBusy[0m, [32;40;1mTE seen[0m, 
+DSI_WCFGR = 0x0000000B
+DSI_LCOLCR = 0x00000005
+Updated status:
+DSI Wrapper interrupt status register (0x00003302) : [32;40;1mRegulator ready[0m, [32;40;1mPLL Locked[0m, [32;40;1mIdle[0m, [32;40;1mTE seen[0m, 
+
