@@ -2,21 +2,35 @@ Graphics Demo
 -------------
 
 This demo creates some simple graphic images on the LCD
-attached to the board, other demos are more sophisticated.
+attached to the board.
 
-The relevant bit here is that this version of the ST Micro
+The interesting  bit here is that this version of the ST Micro
 F4 series sports a MIPI Compliant DSI interface. What that
 means is that you can drive an 800 x 480 display with just
-four pins on the chip. That is pretty cool, but in order
-to use it you have to first configure the LTDC to display
-your screen, and then you have to program the DSI unit
-to take that output and encode it as a MIPI stream and
-send it over to the display. That makes screen setup more
-complicated than one might hope.
+four dedicated pins on the SOC chip. That is pretty cool,
+and it frees up pins for other things. The down side is that
+its pretty stupidly complicated.
 
-Setup is needlessly complex, I used a small perl script
-to extract the initialization instructions that are sent
-to the LCD. That resulted in a pretty simple state machine
-for initializing the LCD display through the DSI's "Generic"
-packet interface. 
+To make the display work you first have to configure the DSI
+Host. This sends things to the display on your behalf. Then
+you have to configure the LTDC, internally the DSI is connected
+to the LTDC through something called the DSI Wrapper. Once
+the LTDC is configured you can configure the DSI Wrapper.
+
+Now that the thing is plumbed, you can send set up codes
+to the LCD using the DSI "generic" packet interface.
+I used a small perl script (`extract-init-from-code.pl`)
+which read through the code in the STM32Cube source for
+the display, and pulled out the 181 different packets you
+have to send (and exactly right) to get the display to
+wake up. Apparently nobody has heard of serial eeproms for
+configuration data between the controller IC and the display
+**that is soldered too it.** 
+
+## Operation
+
+This demo will talk to you on the serial port the board
+presents to the host computer. Serial details are 576008N1
+for use with gnu screen or hyperterminal or putty or whatever.
+
 

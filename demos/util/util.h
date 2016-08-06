@@ -71,4 +71,15 @@ void qspi_unmap_flash(void);
 
 #define FLASH_BASE_ADDRESS ((uint8_t *)(0x90000000))
 
+/*
+ * LCD function (if you've included lcd.o)
+ */
+
+/* #define FRAMEBUFFER_ADDRESS (0xc0000000U - (800U * 480U * 4U)) */
+#define FRAMEBUFFER_ADDRESS (0xc1000000U - 0x200000U)
+void lcd_init(void);
+void lcd_clear(uint32_t color);
+void lcd_flip(int te_locked);
+void lcd_draw_pixel(int x, int y, uint16_t color);
+
 #endif /* generic header protector */

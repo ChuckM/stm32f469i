@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 #include <math.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
@@ -569,7 +570,7 @@ lcd_init(uint8_t *fb)
 	 * Default background color is non-black so you can see if if your layer setup
 	 * doesn't completely cover the display.
 	 */
-	LTDC_BCCR = 0xff8080;
+	LTDC_BCCR = 0x000000;
 
 	/* Turn it on */
 	LTDC_GCR |= LTDC_GCR_LTDCEN;
@@ -626,8 +627,7 @@ lcd_init(uint8_t *fb)
 #define wrap_disable	DSI_WCR &= ~DSI_WCR_DSIEN
 #define wrap_enable		DSI_WCR |= DSI_WCR_DSIEN
 
-void flip(void);
-int tear_lock = 1;
+void flip(int te_lock);
 
 /*
  * Wait for DSI to be not busy then send it the frame
@@ -641,7 +641,7 @@ int tear_lock = 1;
  *          is active.
  */
 void
-flip(void)
+flip(int te_lock)
 {
 	/* Wait for DSI to be not busy */
 	while (DSI_WISR & DSI_WISR_BUSY) ;
@@ -653,7 +653,7 @@ flip(void)
 	}
 #endif
 	/* Attempt 2, monitor the GPIO pin */
-	if (tear_lock) {
+	if (te_lock) {
 		while (gpio_get(GPIOJ, GPIO2)  == 0) ;
 	}
 	DSI_WCR |= DSI_WCR_LTDCEN;
@@ -784,7 +784,9 @@ main(void)
 					t0 = t1 = mtime();
 					snprintf(fps, 25, "*** FPS");
 					while (console_getc(0) == 0) {
-						gfx_fillScreen(0x0);
+						for (i = 0; i < 800 * 480; i++) {
+							*(buf + i) = 0xff000000;
+						}
 						gfx_setCursor(250, 100);
 						gfx_puts((unsigned char *)"Some Planets");
 						gfx_fillCircle(400, 240, 50, GFX_COLOR_BLUE);
@@ -806,7 +808,7 @@ main(void)
 						}
 						gfx_setCursor(500, 400);
 						gfx_puts((unsigned char *) fps);
-						flip();
+						flip(0);
 					}
 					break;
 				case 'a':
@@ -820,7 +822,10 @@ main(void)
 					t0 = t1 = mtime();
 					snprintf(fps, 25, "*** FPS");
 					while (console_getc(0) == 0) {
-						gfx_fillScreen(0x0);
+						for (i = 0; i < 800 * 480; i++) {
+							*(buf + i) = 0xff000000;
+						}
+						/* gfx_fillScreen(0x0); */
 						gfx_setCursor(250, 100);
 						gfx_puts((unsigned char *)"Some Planets");
 						gfx_fillCircle(400, 240, 50, GFX_COLOR_BLUE);
@@ -832,9 +837,6 @@ main(void)
 						x = sin((float) r2 / 180.0 * 3.14159) * 150;
 						y = cos((float) r2 / 180.0 * 3.14159) * 150;
 						gfx_fillCircle(400 + x, 240 + y, 25, GFX_COLOR_RED);
-						gfx_drawLine(399, 90, 399, 290, GFX_COLOR_WHITE);
-						gfx_drawLine(400, 90, 400, 290, GFX_COLOR_WHITE);
-						gfx_drawLine(401, 90, 401, 290, GFX_COLOR_WHITE);
 						/* every 60 frames this hits 0 */
 						if (r2 == 0) {
 							t1 = mtime();
@@ -845,7 +847,7 @@ main(void)
 						}
 						gfx_setCursor(500, 400);
 						gfx_puts((unsigned char *) fps);
-						flip();
+						flip(1);
 					}
 					break;
 						
