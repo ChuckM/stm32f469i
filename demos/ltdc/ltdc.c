@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <math.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/ltdc.h>
@@ -195,6 +196,7 @@ const uint8_t __lcd_init_data[] = {
 #else
 	2, 0x3A, 0x77, /* S: ShortRegData38 */
 #endif
+	2, 0x35, 0x00,	/* Tearing Effect On (Attempt 2) */
 
 #ifdef LCD_FORMAT_LANDSCAPE
 	2, 0x36, 0x60, /* S: ShortRegData39 */
@@ -352,7 +354,13 @@ gpio_init(void)
 	gpio_set_output_options(GPIOH, GPIO_OTYPE_OD, GPIO_OSPEED_100MHZ, GPIO7);
 	/* tearing effect signal */
 	rcc_periph_clock_enable(RCC_GPIOJ);
+	/* Attempt 2 generic input */
 	gpio_mode_setup(GPIOJ, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO2);
+#if 0
+	/* Attempt 1, tied to DSI TE line internally */
+	gpio_mode_setup(GPIOJ, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO2);
+	gpio_set_af(GPIOJ, GPIO_AF13, GPIO2);
+#endif
 }
 
 /*
@@ -429,7 +437,7 @@ lcd_init(uint8_t *fb)
 	p = 8;
 	q = 34;
 	n = 384;
-	r = 2;
+	r = 5;
 	rcc_osc_off(RCC_PLLSAICFGR);
 	/* mask out old values (q, p preserved above) */
 	tmp &= ~((RCC_PLLSAICFGR_PLLSAIN_MASK << RCC_PLLSAICFGR_PLLSAIN_SHIFT) |
@@ -445,7 +453,7 @@ lcd_init(uint8_t *fb)
 			((r & RCC_PLLSAICFGR_PLLSAIR_MASK) << RCC_PLLSAICFGR_PLLSAIR_SHIFT));
 
 	RCC_DCKCFGR = (RCC_DCKCFGR & ~(RCC_DCKCFGR_PLLSAIDIVR_MASK << RCC_DCKCFGR_PLLSAIDIVR_SHIFT)) |
-				  (RCC_DCKCFGR_PLLSAIDIVR_DIVR_4 << RCC_DCKCFGR_PLLSAIDIVR_SHIFT);
+				  (RCC_DCKCFGR_PLLSAIDIVR_DIVR_2 << RCC_DCKCFGR_PLLSAIDIVR_SHIFT);
 	RCC_DCKCFGR |= RCC_DCKCFGR_48MSEL; /* 48Mhz clock comes from SAI */
 	rcc_osc_on(RCC_PLLSAI);
 	rcc_wait_for_osc_ready(RCC_PLLSAI);
@@ -619,23 +627,35 @@ lcd_init(uint8_t *fb)
 #define wrap_enable		DSI_WCR |= DSI_WCR_DSIEN
 
 void flip(void);
+int tear_lock = 1;
 
 /*
  * Wait for DSI to be not busy then send it the frame
+ *
+ * Attempt 1 - see if we can just wait for TEIF
+ *	Answer: No, this flag is not set.
+ *
+ * Attempt 2 - Turn on Tearing Effect on the display and
+ *	monitor the GPIO as a generic input.
+ *  Answer: That works! We see the TE pin go 'high' when Vblank
+ *          is active.
  */
 void
 flip(void)
 {
-	int cnt;
-
+	/* Wait for DSI to be not busy */
 	while (DSI_WISR & DSI_WISR_BUSY) ;
-	cnt = 0;
+	
 #if 0
-	while (gpio_get(GPIOJ, GPIO2) == 0) {
+/*	DSI_WIFCR = DSI_WIFCR_CTEIF; */
+	while ((DSI_WISR & DSI_WISR_TEIF) == 0) {
 		cnt++;
 	}
 #endif
-	printf("Count = %d\n", cnt);
+	/* Attempt 2, monitor the GPIO pin */
+	if (tear_lock) {
+		while (gpio_get(GPIOJ, GPIO2)  == 0) ;
+	}
 	DSI_WCR |= DSI_WCR_LTDCEN;
 }
 
@@ -712,7 +732,7 @@ simple_graphics(void)
 int
 main(void)
 {
-	int t, c, x, y;
+	int t, r1, r2, c, x, y;
 	unsigned int	i;
 	uint32_t	*buf = (uint32_t *)(FB_ADDRESS);
 	uint32_t	col;
@@ -721,6 +741,7 @@ main(void)
 
 	uint32_t	*test_buf;
 	uint32_t	test_val;
+	char fps[25];
 
 
 	fprintf(stderr, "LTDC/DSI Demo Program\n");
@@ -747,10 +768,87 @@ main(void)
 	
 	while (1) {
 		char xc;
+		uint32_t t1, t0, dt;
 
 		while (1) {
 			xc = console_getc(1);
 			switch (xc) {
+				case 'A':
+					printf("Animation test (TE unlocked).\n");
+					tear_lock = 0;
+					r1= 0;
+					r2 = 0;
+					gfx_setTextColor(GFX_COLOR_YELLOW, 0);
+					gfx_setFont(GFX_FONT_LARGE);
+					gfx_setTextSize(2);
+					t0 = t1 = mtime();
+					snprintf(fps, 25, "*** FPS");
+					while (console_getc(0) == 0) {
+						gfx_fillScreen(0x0);
+						gfx_setCursor(250, 100);
+						gfx_puts((unsigned char *)"Some Planets");
+						gfx_fillCircle(400, 240, 50, GFX_COLOR_BLUE);
+						r1= (r1 + 12) % 360;
+						r2= (r2 + 6) % 360;
+						x = sin((float) r1 / 180.0 * 3.14159) * 100;
+						y = cos((float) r1 / 180.0 * 3.14159) * 100;
+						gfx_fillCircle(400 + x, 240 + y, 15, 0x7bef);
+						x = sin((float) r2 / 180.0 * 3.14159) * 150;
+						y = cos((float) r2 / 180.0 * 3.14159) * 150;
+						gfx_fillCircle(400 + x, 240 + y, 25, GFX_COLOR_RED);
+						/* every 60 frames this hits 0 */
+						if (r2 == 0) {
+							t1 = mtime();
+							dt = t1 - t0;
+							t0 = t1;
+							/* delta t is in milliseconds, so 1000 * 60 / dt = FPS */
+							snprintf(fps, 25, "%5.2f FPS", 60000.0 / (float) (dt));
+						}
+						gfx_setCursor(500, 400);
+						gfx_puts((unsigned char *) fps);
+						flip();
+					}
+					break;
+				case 'a':
+					printf("Animation test (TE locked).\n");
+					tear_lock = 1;
+					r1= 0;
+					r2 = 0;
+					gfx_setTextColor(GFX_COLOR_YELLOW, 0);
+					gfx_setFont(GFX_FONT_LARGE);
+					gfx_setTextSize(2);
+					t0 = t1 = mtime();
+					snprintf(fps, 25, "*** FPS");
+					while (console_getc(0) == 0) {
+						gfx_fillScreen(0x0);
+						gfx_setCursor(250, 100);
+						gfx_puts((unsigned char *)"Some Planets");
+						gfx_fillCircle(400, 240, 50, GFX_COLOR_BLUE);
+						r1= (r1 + 12) % 360;
+						r2= (r2 + 6) % 360;
+						x = sin((float) r1 / 180.0 * 3.14159) * 100;
+						y = cos((float) r1 / 180.0 * 3.14159) * 100;
+						gfx_fillCircle(400 + x, 240 + y, 15, 0x7bef);
+						x = sin((float) r2 / 180.0 * 3.14159) * 150;
+						y = cos((float) r2 / 180.0 * 3.14159) * 150;
+						gfx_fillCircle(400 + x, 240 + y, 25, GFX_COLOR_RED);
+						gfx_drawLine(399, 90, 399, 290, GFX_COLOR_WHITE);
+						gfx_drawLine(400, 90, 400, 290, GFX_COLOR_WHITE);
+						gfx_drawLine(401, 90, 401, 290, GFX_COLOR_WHITE);
+						/* every 60 frames this hits 0 */
+						if (r2 == 0) {
+							t1 = mtime();
+							dt = t1 - t0;
+							t0 = t1;
+							/* delta t is in milliseconds, so 1000 * 60 / dt = FPS */
+							snprintf(fps, 25, "%5.2f FPS", 60000.0 / (float) (dt));
+						}
+						gfx_setCursor(500, 400);
+						gfx_puts((unsigned char *) fps);
+						flip();
+					}
+					break;
+						
 				case 'C':
 					printf("Enter fill color: ");
 					fflush(stdout);
