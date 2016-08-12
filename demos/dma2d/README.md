@@ -66,7 +66,7 @@ skeumorphism with respect to emulating 7 segment displays.
 Still it renders at 20 frames per second which is a pretty healthy
 clip for an 800 x 480 screen. Here is a [short movie][movie].
 
-[movie]: https://https://goo.gl/photos/r4pA9Z9jawZY6io96
+[movie]: https://goo.gl/photos/r4pA9Z9jawZY6io96
 
 ## Connections
 
