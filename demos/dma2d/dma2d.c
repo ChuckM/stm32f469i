@@ -16,10 +16,12 @@
 
 #include "../util/util.h"
 
-void draw_digit(int x, int y, int d, uint16_t color);
-void draw_colon(int x, int y, uint16_t color);
-void draw_dp(int x, int y, uint16_t color);
+void draw_digit(int x, int y, int d, uint16_t color, uint16_t outline);
+void draw_colon(int x, int y, uint16_t color, uint16_t outline);
+void draw_dp(int x, int y, uint16_t color, uint16_t outline);
+void dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline);
 void generate_background(void);
+void generate_digits(void);
 
 /*
  *   This defines a parameterized 7 segment display graphic
@@ -128,7 +130,6 @@ skew_factor(int dy, int h)
 	int i;
 	/* dy is distance from the 'top' of the display box */
 	i =  ((SKEW_MAX * (h - dy)) / h);
-//	printf("   ... dy = %d, skew = %d\n", dy, i);
 	return i;
 }
 
@@ -141,7 +142,7 @@ skew_factor(int dy, int h)
  * digit. (yes its retro, ok?)
  */
 void
-draw_digit(int x, int y, int d, uint16_t color) {
+draw_digit(int x, int y, int d, uint16_t color, uint16_t outline) {
 	int i;
 	uint8_t seg_mask;
 	int	sx, sy, ndx, xf, yf;
@@ -201,7 +202,7 @@ draw_digit(int x, int y, int d, uint16_t color) {
 					skew_factor((sy + *(segment_data[i].segs + ndx + 3) * yf - y), DISP_HEIGHT) +
 					    	sx	+ *(segment_data[i].segs + ndx + 2) * xf,
 					sy + *(segment_data[i].segs + ndx + 3) * yf,
-							GFX_COLOR_BLACK);
+							outline);
 			}
 			gfx_drawLine(
 				skew_factor((sy + *(segment_data[i].segs + 1) * yf - y), DISP_HEIGHT) +
@@ -210,7 +211,7 @@ draw_digit(int x, int y, int d, uint16_t color) {
 				skew_factor((sy + *(segment_data[i].segs + ndx + 1) * yf - y), DISP_HEIGHT) +
 							sx + *(segment_data[i].segs + ndx) * xf,
 				sy + *(segment_data[i].segs + ndx + 1) * yf,
-							GFX_COLOR_BLACK);
+							outline);
 		} else {
 			// draw 'off' segment?
 #ifdef DRAW_DARK_SEGMENT
@@ -243,7 +244,7 @@ draw_digit(int x, int y, int d, uint16_t color) {
 					skew_factor((sy + *(segment_data[i].segs + ndx + 3) * yf - y), DISP_HEIGHT) +
 					    	sx	+ *(segment_data[i].segs + ndx + 2) * xf,
 					sy + *(segment_data[i].segs + ndx + 3) * yf,
-							GFX_COLOR_BLACK);
+							outline);
 			}
 			gfx_drawLine(
 				skew_factor((sy + *(segment_data[i].segs + 1) * yf - y), DISP_HEIGHT) +
@@ -252,7 +253,7 @@ draw_digit(int x, int y, int d, uint16_t color) {
 				skew_factor((sy + *(segment_data[i].segs + ndx + 1) * yf - y), DISP_HEIGHT) +
 							sx + *(segment_data[i].segs + ndx) * xf,
 				sy + *(segment_data[i].segs + ndx + 1) * yf,
-							GFX_COLOR_BLACK);
+							outline);
 #endif
 		}
 	}
@@ -271,37 +272,38 @@ draw_digit(int x, int y, int d, uint16_t color) {
  * vertical mid-point.
  */
 void
-draw_colon(int x, int y, uint16_t color)
+draw_colon(int x, int y, uint16_t color, uint16_t outline)
 {
 	gfx_fillCircle(
 		skew_factor(DISP_HEIGHT / 2 - COLON_SPREAD, DISP_HEIGHT) + x + SEG_THICK/2,
 		y + (DISP_HEIGHT / 2 - COLON_SPREAD) - SEG_THICK/2, SEG_THICK/2, color);
 	gfx_drawCircle(
 		skew_factor(DISP_HEIGHT / 2 - COLON_SPREAD, DISP_HEIGHT) + x + SEG_THICK/2,
-		y + (DISP_HEIGHT / 2 - COLON_SPREAD) - SEG_THICK/2, SEG_THICK/2, GFX_COLOR_BLACK);
+		y + (DISP_HEIGHT / 2 - COLON_SPREAD) - SEG_THICK/2, SEG_THICK/2, outline);
 	gfx_fillCircle(
 		skew_factor(DISP_HEIGHT / 2 + COLON_SPREAD, DISP_HEIGHT) + x + SEG_THICK/2,
 		y + (DISP_HEIGHT / 2 + COLON_SPREAD) + SEG_THICK/2, SEG_THICK/2, color);
 	gfx_drawCircle(
 		skew_factor(DISP_HEIGHT / 2 + COLON_SPREAD, DISP_HEIGHT) + x + SEG_THICK/2,
-		y + (DISP_HEIGHT / 2 + COLON_SPREAD) + SEG_THICK/2, SEG_THICK/2, GFX_COLOR_BLACK);
+		y + (DISP_HEIGHT / 2 + COLON_SPREAD) + SEG_THICK/2, SEG_THICK/2, outline);
 }
 
 /*
  * For displays with a decimal point, draw the decimal point
  */
 void
-draw_dp(int x, int y, uint16_t color)
+draw_dp(int x, int y, uint16_t color, uint16_t outline)
 {
 	gfx_fillCircle(
 		skew_factor(DISP_HEIGHT - (SEG_THICK/2), DISP_HEIGHT) + x + SEG_THICK/2,
 		y + DISP_HEIGHT - SEG_THICK/2, SEG_THICK/2, color);
 	gfx_drawCircle(
 		skew_factor(DISP_HEIGHT - (SEG_THICK/2), DISP_HEIGHT) + x + SEG_THICK/2,
-		y + DISP_HEIGHT - SEG_THICK/2, SEG_THICK/2, GFX_COLOR_BLACK);
+		y + DISP_HEIGHT - SEG_THICK/2, SEG_THICK/2, outline);
 }
 
 void display_clock(int x, int y, uint32_t tm);
+void dma2d_clock(int x, int y, uint32_t tm, int ds);
 
 void
 display_clock(int x, int y, uint32_t tm)
@@ -312,40 +314,118 @@ display_clock(int x, int y, uint32_t tm)
 	mm = (int) (tm % 3600000) / 60000;
 	ss = (int) (tm % 60000) / 1000;
 	ms = (int) tm % 1000;
-	draw_digit(x, y, hh / 10, GFX_COLOR_RED);
+	draw_digit(x, y, hh / 10, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
-	draw_digit(x, y, hh % 10, GFX_COLOR_RED);
+	draw_digit(x, y, hh % 10, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
-	draw_colon(x, y, GFX_COLOR_RED);
+	draw_colon(x, y, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += SEG_THICK + SEG_THICK/2;;
-	draw_digit(x, y, mm / 10, GFX_COLOR_RED);
+	draw_digit(x, y, mm / 10, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
-	draw_digit(x, y, mm % 10, GFX_COLOR_RED);
+	draw_digit(x, y, mm % 10, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
-	draw_colon(x, y, GFX_COLOR_RED);
+	draw_colon(x, y, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += SEG_THICK + SEG_THICK/2;;
-	draw_digit(x, y, ss / 10, GFX_COLOR_RED);
+	draw_digit(x, y, ss / 10, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
-	draw_digit(x, y, ss % 10, GFX_COLOR_RED);
+	draw_digit(x, y, ss % 10, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
-	draw_dp(x, y, GFX_COLOR_RED);
+	draw_dp(x, y, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += SEG_THICK + SEG_THICK/2;
-	draw_digit(x, y, ms / 100, GFX_COLOR_RED);
+	draw_digit(x, y, ms / 100, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
-	draw_digit(x, y, ms / 10, GFX_COLOR_RED);
+	draw_digit(x, y, ms / 10, GFX_COLOR_RED, GFX_COLOR_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
-	draw_digit(x, y, ms, GFX_COLOR_RED);
+	draw_digit(x, y, ms, GFX_COLOR_RED, GFX_COLOR_BLACK);
+}
+
+#define SHADOW 0x80000000
+#define DMA2D_RED	0xffff0000
+#define DMA2D_BLACK	0xff000000
+
+void
+dma2d_clock(int x, int y, uint32_t tm, int ds)
+{
+	int hh, mm, ss, ms;
+
+	hh = (int) tm / 3600000;
+	mm = (int) (tm % 3600000) / 60000;
+	ss = (int) (tm % 60000) / 1000;
+	ms = (int) tm % 1000;
+	if (ds) {
+		dma2d_digit(x+10, y+10, hh / 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, hh / 10, DMA2D_RED, DMA2D_BLACK);
+	x += DISP_WIDTH + SEG_THICK/2;
+	if (ds) {
+		dma2d_digit(x+10, y+10, hh % 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, hh % 10, DMA2D_RED, DMA2D_BLACK);
+	x += DISP_WIDTH + SEG_THICK/2;
+	if (ds) {
+		dma2d_digit(x+10, y+10, 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, 10, DMA2D_RED, DMA2D_BLACK);
+	x += SEG_THICK + SEG_THICK/2;;
+	if (ds) {
+		dma2d_digit(x+10, y+10, mm / 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, mm / 10, DMA2D_RED, DMA2D_BLACK);
+	x += DISP_WIDTH + SEG_THICK/2;
+	if (ds) {
+		dma2d_digit(x+10, y+10, mm % 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, mm % 10, DMA2D_RED, DMA2D_BLACK);
+	x += DISP_WIDTH + SEG_THICK/2;
+	if (ds) {
+		dma2d_digit(x+10, y+10, 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, 10, DMA2D_RED, DMA2D_BLACK);
+	x += SEG_THICK + SEG_THICK/2;;
+	if (ds) {
+		dma2d_digit(x+10, y+10, ss / 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, ss / 10, DMA2D_RED, DMA2D_BLACK);
+	x += DISP_WIDTH + SEG_THICK/2;
+	if (ds) {
+		dma2d_digit(x+10, y+10, ss % 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, ss % 10, DMA2D_RED, DMA2D_BLACK);
+	x += DISP_WIDTH + SEG_THICK/2;
+	if (ds) {
+		dma2d_digit(x+10, y+10, 11, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, 11, DMA2D_RED, DMA2D_BLACK);
+	x += SEG_THICK + SEG_THICK/2;
+	if (ds) {
+		dma2d_digit(x+10, y+10, (ms / 100) % 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, (ms / 100) % 10, DMA2D_RED, DMA2D_BLACK);
+	x += DISP_WIDTH + SEG_THICK/2;
+	if (ds) {
+		dma2d_digit(x+10, y+10, (ms / 10) % 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, (ms / 10) % 10, DMA2D_RED, DMA2D_BLACK);
+	x += DISP_WIDTH + SEG_THICK/2;
+	if (ds) {
+		dma2d_digit(x+10, y+10, ms % 10, SHADOW, SHADOW);
+	}
+	dma2d_digit(x, y, ms % 10, DMA2D_RED, DMA2D_BLACK);
 }
 
 /* another frame buffer 2MB "before" the standard one */
 #define BACKGROUND_FB (FRAMEBUFFER_ADDRESS - 0x200000U)
-#define MAX_OPTS	4
+#define MAX_OPTS	6
 
 void dma2d_bgfill(void);
 void dma2d_fill(uint32_t color);
 
 /*
- * Copy in a the background first
+ * The DMA2D device can copy memory to memory, so in this case
+ * we have another frame buffer with just the background in it.
+ * And that is copied from there to the main display. It happens
+ * faster than the tight loop fill but slightly slower than the
+ * register to memory fill.
  */
 void
 dma2d_bgfill(void)
@@ -386,13 +466,7 @@ void
 dma2d_fill(uint32_t color)
 {
 	
-	if (DMA2D_ISR & DMA2D_ISR_CEIF) {
-		DMA2D_IFCR |= 0x3F;
-		if (DMA2D_ISR & DMA2D_ISR_CEIF) {
-			printf("Failed to clear configuration error\n");
-			while(1);
-		}
-	}
+	DMA2D_IFCR |= 0x3F;
 	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_R2M);
 	DMA2D_OPFCCR = 0x0; /* ARGB8888 pixels */
 	/* force it to have full alpha */
@@ -403,13 +477,19 @@ dma2d_fill(uint32_t color)
 
 	/* kick it off */
 	DMA2D_CR |= DMA2D_CR_START;
-	while ((DMA2D_CR & DMA2D_CR_START)) ;
-	if (DMA2D_ISR & DMA2D_ISR_CEIF) {
-		printf("Configuration error!\n");
-		while (1);
-	}
+	while (DMA2D_CR & DMA2D_CR_START) ;
 }
 
+/*
+ * This set of utility functions are used once to
+ * render our "background" into memory. Later we
+ * will use the dma2d_bgfill to copy it into the
+ * main display to "reset" the display to its non-drawn on
+ * state. 
+ *
+ * The background is a set up to look like quadrille 
+ * graph paper with darker lines every 5 lines.
+ */
 #define GRID_BG		0xffffff	/* white */
 #define LIGHT_GRID	0xffc0c0ff	/* light blue */
 #define DARK_GRID	0xffc0c0e0	/* dark blue */
@@ -474,11 +554,210 @@ generate_background(void)
 	gfx_drawRoundRect(2, 2, 796, 476, 15, 2);
 }
 
+/*
+ * This should be a data buffer which can hold 10 digits, 
+ * a colon, and a decimal point, note that pixels in this
+ * buffer are one byte each.
+ */
+void digit_draw_pixel(int x, int y, uint16_t color);
+void print_digit(int n);
+
+#define DIGIT_FB_WIDTH 	((DISP_WIDTH + SKEW_MAX) * 10 + (SEG_THICK + SKEW_MAX) * 2)
+#define DIGIT_FB_HEIGHT (DISP_HEIGHT)
+
+uint8_t digit_fb[DIGIT_FB_WIDTH * DIGIT_FB_HEIGHT];
+
+/* This is the simple graphics helper function to draw into it */
+void
+digit_draw_pixel(int x, int y, uint16_t color)
+{
+	digit_fb[y * DIGIT_FB_WIDTH + x] = (uint8_t)(color & 0xff);
+}
+
+/*
+ * This then will render a digit to the console, its good for
+ * debugging.
+ */
+void
+print_digit(int n) {
+	uint8_t *row;
+	unsigned int tx, ty;
+
+	printf("Digit FB size (W, H) = (%d, %d)\n", DIGIT_FB_WIDTH, DIGIT_FB_HEIGHT);
+	row = (uint8_t *)&digit_fb[(n % 10) * (DISP_WIDTH+SKEW_MAX)];
+	for (ty = 0; ty < DISP_HEIGHT; ty++) {
+		for (tx = 0; tx < (DISP_WIDTH + SKEW_MAX); tx++) {
+			switch (*(row + tx)) {
+				case 0:
+					console_putc(' ');
+					break;
+				case 1:
+					console_putc('*');
+					break;
+				case 2:
+					console_putc('.');
+					break;
+				default:
+					console_putc('X');
+					break;
+			}
+		}
+		printf("\n");
+		row += DIGIT_FB_WIDTH;
+	}
+	/* END DEBUG CODE */
+}
+
+/*
+ * And this is where we will generate our digits
+ * when we copy them with the DMA2D device we can
+ * use the color lookup table to set the values.
+ * in this case we'll use 0, 1, and 2 for background
+ * foreground, and outline color.
+ *
+ * While the digits are kerned in the display they are
+ * drawn here with a box that is DISP_WIDTH + SKEW_MAX
+ * pixels wide, but DISP_HEIGHT pixels high.
+ */
+void
+generate_digits(void)
+{
+	uint32_t i;
+	gfx_init(digit_draw_pixel, DIGIT_FB_WIDTH, DIGIT_FB_HEIGHT, GFX_FONT_LARGE);
+	/* Cleared to zero (background) */
+	for (i = 0; i < sizeof(digit_fb); i++) {
+		digit_fb[i] = 0;
+	}
+	for (i = 0; i < 10; i++) {
+		draw_digit(i * (DISP_WIDTH + SKEW_MAX), 0, i, 1, 2);
+	}
+	draw_colon(10 * (DISP_WIDTH + SKEW_MAX), 0, 1, 2);
+	draw_dp(10 * (DISP_WIDTH + SKEW_MAX) + SEG_THICK + SKEW_MAX, 0, 1, 2);
+	/* now the digit_fb memory has the 10 digits 0-9, : and . in it */
+}
+
+/*
+ * This then uses the DMA2D peripheral to copy a digit from the 
+ * pre-rendered digit buffer, and render it into the main display
+ * area. It does what many people call a "cookie cutter" blit, which
+ * is that the pixels that have color (are non-zero) are rendered
+ * but when the digit buffer has a value of '0' the background is
+ * rendered. 
+ * 
+ * The digit colors are stored in the Foreground color lookup
+ * table, they are as passed in, except color 0 (background)
+ * is always 0. 
+ *
+ * DMA2D is set up to read the original image (which has alpha of
+ * 0xff (opaque) and then it multiples that alpha and the color
+ * alpha, and 0xFF renders the digit color opaquely, 0x00 renders
+ * the existing color. When drawing drop shadows we use an alpha
+ * of 0x80 which makes the drop shadows 50% transparent.
+ */
+void
+dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
+{
+	uint32_t t;
+	int	w;
+
+	while (DMA2D_CR & DMA2D_CR_START) ;
+	/* This is going to be a memory to memory with PFC transfer */
+	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_M2MWB);
+
+	*(DMA2D_FG_CLUT) = 0x0; /* transparent black */
+	*(DMA2D_FG_CLUT+1) = color; /* foreground */
+	*(DMA2D_FG_CLUT+2) = outline; /* outline color */
+
+	/* compute target address */
+	t = (uint32_t) FRAMEBUFFER_ADDRESS + (800 * 4 * y) + x * 4;
+ 	/* Output goes to the main frame buffer */
+	DMA2D_OMAR = t;
+	/* Its also the pixels we want to read incase the digit is
+ 	 * transparent at that point
+	 */
+	DMA2D_BGMAR = t;
+	DMA2D_BGPFCCR = DMA2D_SET(BGPFCCR, CM, DMA2D_BGPFCCR_CM_ARGB8888) |
+					DMA2D_SET(BGPFCCR, AM, 0);
+					
+	/* output frame buffer is ARGB8888 */
+	DMA2D_OPFCCR = DMA2D_OPFCCR_CM_ARGB8888;
+
+	/* 
+	 * This sets the size of the "box" we're going to copy. For the
+	 * digits it is DISP_WIDTH + SKEW_MAX pixels wide for the ':' and
+ 	 * '.' character is will be SEG_THICK + SKEW_MAX wide, it is always
+	 * DISP_HEIGHT tall.
+ 	 */
+	if (d < 10) {
+		w = DISP_WIDTH + SKEW_MAX;
+		/* This points to the top left corner of the digit */
+		t = (uint32_t) &(digit_fb[(d % 10) * (DISP_WIDTH + SKEW_MAX)]);
+	} else if (d == 10) {
+		/* colon comes just past the 10 digits */
+		w = SEG_THICK + SKEW_MAX;
+		t = (uint32_t) &(digit_fb[10 * (DISP_WIDTH + SKEW_MAX)]);
+	} else {
+		/* the decimal point is the character after colon */
+		w = SEG_THICK + SKEW_MAX;
+		t = (uint32_t) &(digit_fb[10 * (DISP_WIDTH + SKEW_MAX) + (w)]);
+	}
+	/* So this then describes the box size */
+	DMA2D_NLR = DMA2D_SET(NLR, PL, w) | DISP_HEIGHT;
+	/*
+	 * This is how many additional pixels we need to move to get to
+	 * the next line of output.
+	 */
+	DMA2D_OOR = 800 - w;
+	/*
+	 * This is how many additional pixels we need to move to get to
+	 * the next line of background (which happens to be the output
+	 * so it is the same).
+	 */
+	DMA2D_BGOR = 800 - w;
+	/*
+ 	 * And finally this is the additional pixels we need to move
+	 * to get to the next line of the pre-rendered digit buffer.
+	 */
+	DMA2D_FGOR = DIGIT_FB_WIDTH - w;
+		
+	/*
+	 * And this points to the top left corner of the prerendered
+	 * digit buffer, where the digit (or character) top left
+	 * corner is.
+	 */
+	DMA2D_FGMAR = t;
+
+	/* Set up the foreground data descriptor
+	 *    - We are only using 3 of the colors in the lookup table (CLUT)
+	 *	  - We don't set alpha since it is in the lookup table
+	 *	  - Alpha mode is 'don't modify' (00)
+	 *	  - CLUT color mode is ARGB8888 (0)
+	 *	  - Color Mode is L8 (0101) or one 8 byte per pixel
+	 *	
+	 */
+	DMA2D_FGPFCCR = DMA2D_SET(FGPFCCR, CS, 255) |
+					DMA2D_SET(FGPFCCR, ALPHA, 255) |
+					DMA2D_SET(FGPFCCR, AM, 0) |
+					DMA2D_SET(FGPFCCR, CM, DMA2D_FGPFCCR_CM_L8);
+	/*
+	 * Transfer it!
+	 */
+	DMA2D_CR |= DMA2D_CR_START;
+	if (DMA2D_ISR & DMA2D_ISR_CEIF) {
+		printf("Configuration error\n");
+		while (1);
+	}
+}
+
 const char *demo_options[] = {
 	 "Manual Clearing",
 	 "Tight loop Clearing",
 	 "DMA2D One color clear",
-	 "DMA2D Background copy clear"
+	 "DMA2D Background copy clear",
+	 "DMA2D Background pattern with digits",
+	 "DMA2D Background pattern with drop shadowed digits",
+	 "Extra string",
+	 "Extra string"
 };
 
 #define N_FRAMES	10
@@ -505,18 +784,21 @@ main(void) {
 	int f_ndx = 0;
 	float avg_frame;
 	int	can_switch;
-	int	opt;
+	int	opt, ds;
 
 	/* Enable the clock to the DMA2D device */
 	rcc_periph_clock_enable(RCC_DMA2D);
-	fprintf(stderr, "DMA2D Demo program (triangle test 2)\n");
+	fprintf(stderr, "DMA2D Demo program : Digits Gone Wild\n");
 	printf("Generate background\n");
 	generate_background();
-	gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE);
+	printf("Generate digits\n");
+	generate_digits();
 
+	gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE);
 	opt = 0; /* screen clearing mode */
 	can_switch = 0; /* auto switching every 10 seconds */
 	t0 = mtime();
+	ds = 0;
 	while (1) {
 		switch (opt) {
 			default:
@@ -540,6 +822,18 @@ main(void) {
 				scr_opt = "DMA 2D Background";
 				dma2d_bgfill();
 				break;
+			case 4:
+				/* Now render all of the digits with DMA2D */
+				scr_opt = "DMA 2D Digits";
+				ds = 0;
+				dma2d_bgfill();
+				break;
+			case 5:
+				/* still fast, using DMA2D to render drop shadows */
+				scr_opt = "DMA 2D Shadowed Digits";
+				ds = 1;
+				dma2d_bgfill();
+				break;
 		}
 
 		/* This little state machine implements an automatic switch
@@ -552,16 +846,37 @@ main(void) {
 		} else  if (((t0 / 1000) % 10 != 0) && (can_switch == 0)){
 			can_switch = 1;
 		}
-		display_clock(25, 20, mtime());
-		for (i = 0; i < 10; i++) {
-			draw_digit(25 + i * (DISP_WIDTH + 8), 350, i, (uint16_t)(24 << 5));
+
+		/* 
+		 * The first four options (0, 1, 2, 3) all render the digits
+	 	 * in software every time, options 4 and 5 use the DMA2D
+		 * device to render the digits
+		 */
+		if (opt < 4) {
+			display_clock(25, 20, mtime());
+		} else {
+			dma2d_clock(25, 20, mtime(), ds);
 		}
+		for (i = 0; i < 10; i++) {
+			if (opt < 4) {
+				draw_digit(25 + i * (DISP_WIDTH + 8), 350, i, GFX_COLOR_GREEN, GFX_COLOR_BLACK);
+			} else {
+				if (ds) {
+					dma2d_digit(35 + i * (DISP_WIDTH + 8), 360, i, SHADOW, SHADOW);
+				}
+				dma2d_digit(25 + i * (DISP_WIDTH + 8), 350, i, 0xff40c040, 0xff000000);
+			}
+		}
+		
+		/* In both cases we write the notes using the graphics library */
 		gfx_setTextColor(0, 0);
-		gfx_setTextSize(4);
-		gfx_setCursor(25, 20 + DISP_HEIGHT + gfx_getTextHeight() + 2);
+		gfx_setTextSize(3);
+		gfx_setCursor(25, 30 + DISP_HEIGHT + gfx_getTextHeight() + 2);
 		gfx_puts((unsigned char *)"Hello world for DMA2D!");
 		lcd_flip(te_lock);
 		t1 = mtime();
+
+		/* this computes a running average of the last 10 frames */
 		frame_times[f_ndx] = t1 - t0;
 		f_ndx = (f_ndx + 1) % N_FRAMES;
 		for (i = 0, avg_frame = 0; i < N_FRAMES; i++) {
@@ -569,10 +884,10 @@ main(void) {
 		}
 		avg_frame = avg_frame / (float) N_FRAMES;
 		snprintf(buf, 35, "FPS: %6.2f", 1000.0 / avg_frame);
-		gfx_setCursor(25, 20 + DISP_HEIGHT + 2 * (gfx_getTextHeight() + 2));
+		gfx_setCursor(25, 30 + DISP_HEIGHT + 2 * (gfx_getTextHeight() + 2));
 		gfx_puts((unsigned char *)buf);
 		gfx_puts((unsigned char *)" ");
-		gfx_setCursor(25, 20 + DISP_HEIGHT + 3 * (gfx_getTextHeight() + 2));
+		gfx_setCursor(25, 30 + DISP_HEIGHT + 3 * (gfx_getTextHeight() + 2));
 		gfx_puts((unsigned char *)scr_opt);
 		/*
 		 * The demo runs continuously but it watches for characters
@@ -586,18 +901,22 @@ main(void) {
 				break;
 			case 'd':
 				can_switch = -1;
+				printf("Auto switching disabled\n");
 				break;
 			case 'e':
 				can_switch = 0;
+				printf("Auto switching enabled\n");
 				break;
 			case 't':
 				te_lock = (te_lock == 0);
+				printf("We are %s for the TE bit to be set\n", (te_lock) ? "WAITING" : "NOT WAITING");
 				break;
 			default:
 				printf("Options:\n");
 				printf("\ts - switch demo mode\n");
 				printf("\td - disable auto-switching of demo mode\n");
 				printf("\te - enable auto-switching of demo mode\n");
+				printf("\tt - enable/disable Tearing effect lock wait\n");
 			case 0:
 				break;
 		}
