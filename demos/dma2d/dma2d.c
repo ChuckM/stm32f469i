@@ -44,15 +44,15 @@ static const int v_seg[] = {
 /*B*/	SEG_THICK / 2, SEG_THICK / 2,
 /*C*/	SEG_THICK / 2, DISP_HEIGHT / 2 - SEG_GAP,
 /*D*/	0, DISP_HEIGHT / 2 - SEG_GAP,
-/*E*/	- SEG_THICK / 2, (( DISP_HEIGHT / 2) - SEG_GAP) - (SEG_THICK / 2),
-/*F*/	- SEG_THICK / 2, SEG_THICK / 2
+/*E*/	-SEG_THICK / 2, ((DISP_HEIGHT / 2) - SEG_GAP) - (SEG_THICK / 2),
+/*F*/	-SEG_THICK / 2, SEG_THICK / 2
 };
 
 /* Middle segment (6 co-ordinate pairs) */
 static const int m_seg[] = {
 /*A*/	0, 0,
-/*B*/	SEG_THICK / 2, - SEG_THICK / 2,
-/*C*/	SEG_THICK / 2 + (DISP_WIDTH - (2 * (SEG_THICK + SEG_GAP))), - SEG_THICK / 2,
+/*B*/	SEG_THICK / 2, -SEG_THICK / 2,
+/*C*/	SEG_THICK / 2 + (DISP_WIDTH - (2 * (SEG_THICK + SEG_GAP))), -SEG_THICK / 2,
 /*D*/	(DISP_WIDTH - SEG_THICK - (2 * SEG_GAP)), 0,
 /*E*/	SEG_THICK / 2 + (DISP_WIDTH - (2 * (SEG_THICK + SEG_GAP))), SEG_THICK / 2,
 /*F*/	SEG_THICK / 2, SEG_THICK / 2
@@ -81,7 +81,7 @@ static const int h_seg[] = {
  *
  * Segments by bit position.
  */
-const uint8_t seg_map [10] = {
+const uint8_t seg_map[10] = {
 	0b01101111,		/* 0 */
 	0b00001001,		/* 1 */
 	0b01011110,		/* 2 */
@@ -152,7 +152,7 @@ draw_digit(int x, int y, int d, uint16_t color, uint16_t outline) {
 #ifdef OUTLINE_DIGIT_BOX
 	gfx_drawLine(
 		skew_factor(0, DISP_HEIGHT) + x - 1,
- 	    y - 1,
+		y - 1,
 		skew_factor(0, DISP_HEIGHT) + x + DISP_WIDTH+2,
 		y - 1, GFX_COLOR_BLUE);
 	gfx_drawLine(
@@ -169,12 +169,12 @@ draw_digit(int x, int y, int d, uint16_t color, uint16_t outline) {
 		skew_factor(DISP_HEIGHT, DISP_HEIGHT) + x - 1,
 		y + DISP_HEIGHT + 2,
 		skew_factor(0, DISP_HEIGHT) + x - 1,
- 	    y - 1, GFX_COLOR_BLUE);
+		y - 1, GFX_COLOR_BLUE);
 #endif
 
 	for (i = 0; i < 7; i++) {
 		if ((seg_mask & (1 << i)) != 0) {
-			// draw segment
+			/* draw segment */
 			sx = x + segment_data[i].xo;
 			sy = y + segment_data[i].yo;
 			xf = segment_data[i].xf;
@@ -200,9 +200,9 @@ draw_digit(int x, int y, int d, uint16_t color, uint16_t outline) {
 						sx + *(segment_data[i].segs + ndx) * xf,
 					sy + *(segment_data[i].segs + ndx + 1) * yf,
 					skew_factor((sy + *(segment_data[i].segs + ndx + 3) * yf - y), DISP_HEIGHT) +
-					    	sx	+ *(segment_data[i].segs + ndx + 2) * xf,
+								sx	+ *(segment_data[i].segs + ndx + 2) * xf,
 					sy + *(segment_data[i].segs + ndx + 3) * yf,
-							outline);
+								outline);
 			}
 			gfx_drawLine(
 				skew_factor((sy + *(segment_data[i].segs + 1) * yf - y), DISP_HEIGHT) +
@@ -213,9 +213,9 @@ draw_digit(int x, int y, int d, uint16_t color, uint16_t outline) {
 				sy + *(segment_data[i].segs + ndx + 1) * yf,
 							outline);
 		} else {
-			// draw 'off' segment?
+			/* draw 'off' segment? */
 #ifdef DRAW_DARK_SEGMENT
-			// draw segment
+			/* draw segment */
 			sx = x + segment_data[i].xo;
 			sy = y + segment_data[i].yo;
 			xf = segment_data[i].xf;
@@ -242,7 +242,7 @@ draw_digit(int x, int y, int d, uint16_t color, uint16_t outline) {
 						sx + *(segment_data[i].segs + ndx) * xf,
 					sy + *(segment_data[i].segs + ndx + 1) * yf,
 					skew_factor((sy + *(segment_data[i].segs + ndx + 3) * yf - y), DISP_HEIGHT) +
-					    	sx	+ *(segment_data[i].segs + ndx + 2) * xf,
+								sx	+ *(segment_data[i].segs + ndx + 2) * xf,
 					sy + *(segment_data[i].segs + ndx + 3) * yf,
 							outline);
 			}
@@ -430,14 +430,21 @@ void dma2d_fill(uint32_t color);
 void
 dma2d_bgfill(void)
 {
+#ifdef MEMORY_BENCHMARK
+	uint32_t t1, t0;
+#endif
+
 	if (DMA2D_ISR & DMA2D_ISR_CEIF) {
 		DMA2D_IFCR |= 0x3F;
 		if (DMA2D_ISR & DMA2D_ISR_CEIF) {
 			printf("Failed to clear configuration error\n");
-			while(1);
+			while (1);
 		}
 	}
 
+#ifdef MEMORY_BENCHMARK
+	t0 = mtime();
+#endif
 	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_M2M);
 	/* no change in alpha, same color mode, no CLUT */
 	DMA2D_FGPFCCR = 0x0;
@@ -449,12 +456,15 @@ dma2d_bgfill(void)
 
 	/* kick it off */
 	DMA2D_CR |= DMA2D_CR_START;
-	while ((DMA2D_CR & DMA2D_CR_START)) ;
+	while ((DMA2D_CR & DMA2D_CR_START));
 	if (DMA2D_ISR & DMA2D_ISR_CEIF) {
 		printf("Configuration error!\n");
 		while (1);
 	}
-	
+#ifdef MEMORY_BENCHMARK
+	t1 = mtime();
+	printf("Transfer rate (M2M) %6.2f MB/sec\n", 1464.84 / (float) (t1 - t0));
+#endif
 }
 
 /*
@@ -465,7 +475,11 @@ dma2d_bgfill(void)
 void
 dma2d_fill(uint32_t color)
 {
-	
+#ifdef MEMORY_BENCHMARK
+	uint32_t t1, t0;
+
+	t0 = mtime();
+#endif
 	DMA2D_IFCR |= 0x3F;
 	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_R2M);
 	DMA2D_OPFCCR = 0x0; /* ARGB8888 pixels */
@@ -477,7 +491,11 @@ dma2d_fill(uint32_t color)
 
 	/* kick it off */
 	DMA2D_CR |= DMA2D_CR_START;
-	while (DMA2D_CR & DMA2D_CR_START) ;
+	while (DMA2D_CR & DMA2D_CR_START);
+#ifdef MEMORY_BENCHMARK
+	t1 = mtime();
+	printf("Transfer rate (R2M) %6.2f MB/sec\n", 1464.84 / (float) (t1 - t0));
+#endif
 }
 
 /*
@@ -485,9 +503,9 @@ dma2d_fill(uint32_t color)
  * render our "background" into memory. Later we
  * will use the dma2d_bgfill to copy it into the
  * main display to "reset" the display to its non-drawn on
- * state. 
+ * state.
  *
- * The background is a set up to look like quadrille 
+ * The background is a set up to look like quadrille
  * graph paper with darker lines every 5 lines.
  */
 #define GRID_BG		0xffffff	/* white */
@@ -504,15 +522,15 @@ bg_draw_pixel(int x, int y, uint16_t color)
 	uint32_t *fb = (uint32_t *) BACKGROUND_FB;
 	c = GRID_BG;
 	switch (color) {
-		default:
-			c = GRID_BG;
-			break;
-		case 1:
-			c = LIGHT_GRID;
-			break;
-		case 2:
-			c = DARK_GRID;
-			break;
+	default:
+		c = GRID_BG;
+		break;
+	case 1:
+		c = LIGHT_GRID;
+		break;
+	case 2:
+		c = DARK_GRID;
+		break;
 	}
 	*(fb + (y * 800) + x) = c;
 }
@@ -555,7 +573,7 @@ generate_background(void)
 }
 
 /*
- * This should be a data buffer which can hold 10 digits, 
+ * This should be a data buffer which can hold 10 digits,
  * a colon, and a decimal point, note that pixels in this
  * buffer are one byte each.
  */
@@ -588,18 +606,18 @@ print_digit(int n) {
 	for (ty = 0; ty < DISP_HEIGHT; ty++) {
 		for (tx = 0; tx < (DISP_WIDTH + SKEW_MAX); tx++) {
 			switch (*(row + tx)) {
-				case 0:
-					console_putc(' ');
-					break;
-				case 1:
-					console_putc('*');
-					break;
-				case 2:
-					console_putc('.');
-					break;
-				default:
-					console_putc('X');
-					break;
+			case 0:
+				console_putc(' ');
+				break;
+			case 1:
+				console_putc('*');
+				break;
+			case 2:
+				console_putc('.');
+				break;
+			default:
+				console_putc('X');
+				break;
 			}
 		}
 		printf("\n");
@@ -637,16 +655,16 @@ generate_digits(void)
 }
 
 /*
- * This then uses the DMA2D peripheral to copy a digit from the 
+ * This then uses the DMA2D peripheral to copy a digit from the
  * pre-rendered digit buffer, and render it into the main display
  * area. It does what many people call a "cookie cutter" blit, which
  * is that the pixels that have color (are non-zero) are rendered
  * but when the digit buffer has a value of '0' the background is
- * rendered. 
- * 
+ * rendered.
+ *
  * The digit colors are stored in the Foreground color lookup
  * table, they are as passed in, except color 0 (background)
- * is always 0. 
+ * is always 0.
  *
  * DMA2D is set up to read the original image (which has alpha of
  * 0xff (opaque) and then it multiples that alpha and the color
@@ -660,7 +678,7 @@ dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 	uint32_t t;
 	int	w;
 
-	while (DMA2D_CR & DMA2D_CR_START) ;
+	while (DMA2D_CR & DMA2D_CR_START);
 	/* This is going to be a memory to memory with PFC transfer */
 	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_M2MWB);
 
@@ -670,24 +688,24 @@ dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 
 	/* compute target address */
 	t = (uint32_t) FRAMEBUFFER_ADDRESS + (800 * 4 * y) + x * 4;
- 	/* Output goes to the main frame buffer */
+	/* Output goes to the main frame buffer */
 	DMA2D_OMAR = t;
 	/* Its also the pixels we want to read incase the digit is
- 	 * transparent at that point
+	 * transparent at that point
 	 */
 	DMA2D_BGMAR = t;
 	DMA2D_BGPFCCR = DMA2D_SET(BGPFCCR, CM, DMA2D_BGPFCCR_CM_ARGB8888) |
 					DMA2D_SET(BGPFCCR, AM, 0);
-					
+
 	/* output frame buffer is ARGB8888 */
 	DMA2D_OPFCCR = DMA2D_OPFCCR_CM_ARGB8888;
 
-	/* 
+	/*
 	 * This sets the size of the "box" we're going to copy. For the
 	 * digits it is DISP_WIDTH + SKEW_MAX pixels wide for the ':' and
- 	 * '.' character is will be SEG_THICK + SKEW_MAX wide, it is always
+	 * '.' character is will be SEG_THICK + SKEW_MAX wide, it is always
 	 * DISP_HEIGHT tall.
- 	 */
+	 */
 	if (d < 10) {
 		w = DISP_WIDTH + SKEW_MAX;
 		/* This points to the top left corner of the digit */
@@ -715,11 +733,11 @@ dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 	 */
 	DMA2D_BGOR = 800 - w;
 	/*
- 	 * And finally this is the additional pixels we need to move
+	 * And finally this is the additional pixels we need to move
 	 * to get to the next line of the pre-rendered digit buffer.
 	 */
 	DMA2D_FGOR = DIGIT_FB_WIDTH - w;
-		
+
 	/*
 	 * And this points to the top left corner of the prerendered
 	 * digit buffer, where the digit (or character) top left
@@ -733,7 +751,7 @@ dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 	 *	  - Alpha mode is 'don't modify' (00)
 	 *	  - CLUT color mode is ARGB8888 (0)
 	 *	  - Color Mode is L8 (0101) or one 8 byte per pixel
-	 *	
+	 *
 	 */
 	DMA2D_FGPFCCR = DMA2D_SET(FGPFCCR, CS, 255) |
 					DMA2D_SET(FGPFCCR, ALPHA, 255) |
@@ -761,8 +779,9 @@ const char *demo_options[] = {
 };
 
 #define N_FRAMES	10
-uint32_t frame_times[N_FRAMES] =
-	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint32_t frame_times[N_FRAMES] = {
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
 
 int te_lock = 1;
 
@@ -801,39 +820,39 @@ main(void) {
 	ds = 0;
 	while (1) {
 		switch (opt) {
-			default:
-			case 0:
-				/* very slow way to clear the screen */
-				scr_opt = "manual clear";
-				gfx_fillScreen(0xffff);
-				break;
-			case 1:
-				/* faster, using a tight loop */
-				scr_opt = "dedicated loop";
-				lcd_clear(0xff7f7f);
-				break;
-			case 2:
-				/* fastest? Using DMA2D to fill screen */
-				scr_opt = "DMA 2D Fill";
-				dma2d_fill(0xff7fff7f);
-				break;
-			case 3:
-				/* still fast, using DMA2D to pre-populate BG */
-				scr_opt = "DMA 2D Background";
-				dma2d_bgfill();
-				break;
-			case 4:
-				/* Now render all of the digits with DMA2D */
-				scr_opt = "DMA 2D Digits";
-				ds = 0;
-				dma2d_bgfill();
-				break;
-			case 5:
-				/* still fast, using DMA2D to render drop shadows */
-				scr_opt = "DMA 2D Shadowed Digits";
-				ds = 1;
-				dma2d_bgfill();
-				break;
+		default:
+		case 0:
+			/* very slow way to clear the screen */
+			scr_opt = "manual clear";
+			gfx_fillScreen(0xffff);
+			break;
+		case 1:
+			/* faster, using a tight loop */
+			scr_opt = "dedicated loop";
+			lcd_clear(0xff7f7f);
+			break;
+		case 2:
+			/* fastest? Using DMA2D to fill screen */
+			scr_opt = "DMA 2D Fill";
+			dma2d_fill(0xff7fff7f);
+			break;
+		case 3:
+			/* still fast, using DMA2D to pre-populate BG */
+			scr_opt = "DMA 2D Background";
+			dma2d_bgfill();
+			break;
+		case 4:
+			/* Now render all of the digits with DMA2D */
+			scr_opt = "DMA 2D Digits";
+			ds = 0;
+			dma2d_bgfill();
+			break;
+		case 5:
+			/* still fast, using DMA2D to render drop shadows */
+			scr_opt = "DMA 2D Shadowed Digits";
+			ds = 1;
+			dma2d_bgfill();
+			break;
 		}
 
 		/* This little state machine implements an automatic switch
@@ -843,13 +862,13 @@ main(void) {
 		if (((t0 / 1000) % 10 == 0) && (can_switch > 0)) {
 			opt = (opt + 1) % MAX_OPTS;
 			can_switch = 0;
-		} else  if (((t0 / 1000) % 10 != 0) && (can_switch == 0)){
+		} else  if (((t0 / 1000) % 10 != 0) && (can_switch == 0)) {
 			can_switch = 1;
 		}
 
-		/* 
+		/*
 		 * The first four options (0, 1, 2, 3) all render the digits
-	 	 * in software every time, options 4 and 5 use the DMA2D
+		 * in software every time, options 4 and 5 use the DMA2
 		 * device to render the digits
 		 */
 		if (opt < 4) {
@@ -867,7 +886,7 @@ main(void) {
 				dma2d_digit(25 + i * (DISP_WIDTH + 8), 350, i, 0xff40c040, 0xff000000);
 			}
 		}
-		
+
 		/* In both cases we write the notes using the graphics library */
 		gfx_setTextColor(0, 0);
 		gfx_setTextSize(3);
@@ -891,34 +910,34 @@ main(void) {
 		gfx_puts((unsigned char *)scr_opt);
 		/*
 		 * The demo runs continuously but it watches for characters
-	 	 * typed at the console. There are a few options you can select.
-	 	 */
+		 * typed at the console. There are a few options you can select.
+		 */
 		i = console_getc(0);
 		switch (i) {
-			case 's':
-				opt = (opt + 1) % MAX_OPTS;
-				printf("Switched to : %s\n", demo_options[opt]);
-				break;
-			case 'd':
-				can_switch = -1;
-				printf("Auto switching disabled\n");
-				break;
-			case 'e':
-				can_switch = 0;
-				printf("Auto switching enabled\n");
-				break;
-			case 't':
-				te_lock = (te_lock == 0);
-				printf("We are %s for the TE bit to be set\n", (te_lock) ? "WAITING" : "NOT WAITING");
-				break;
-			default:
-				printf("Options:\n");
-				printf("\ts - switch demo mode\n");
-				printf("\td - disable auto-switching of demo mode\n");
-				printf("\te - enable auto-switching of demo mode\n");
-				printf("\tt - enable/disable Tearing effect lock wait\n");
-			case 0:
-				break;
+		case 's':
+			opt = (opt + 1) % MAX_OPTS;
+			printf("Switched to : %s\n", demo_options[opt]);
+			break;
+		case 'd':
+			can_switch = -1;
+			printf("Auto switching disabled\n");
+			break;
+		case 'e':
+			can_switch = 0;
+			printf("Auto switching enabled\n");
+			break;
+		case 't':
+			te_lock = (te_lock == 0);
+			printf("We are %s for the TE bit to be set\n", (te_lock) ? "WAITING" : "NOT WAITING");
+			break;
+		default:
+			printf("Options:\n");
+			printf("\ts - switch demo mode\n");
+			printf("\td - disable auto-switching of demo mode\n");
+			printf("\te - enable auto-switching of demo mode\n");
+			printf("\tt - enable/disable Tearing effect lock wait\n");
+		case 0:
+			break;
 		}
 		t0 = t1;
 	}
