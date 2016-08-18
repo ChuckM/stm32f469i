@@ -27,13 +27,13 @@ uint32_t *current_buf = (uint32_t *)(0xc0000000);
 void hard_fault_handler(void);
 /*
  * Write a simple hard fault handler. Ideally you won't need it but in my case
- * while debugging it came in handy. 
+ * while debugging it came in handy.
  * If you hit it, you can find out which line of code you were on using addr2line
  * Example: (with TEST_FAULT defined)
  *    $ arm-none-eabi-addr2line -e sdram.elf 0x800070e
  *    <current directory>/sdram.c:374
  *
- * Which happens to be the code line just AFTER the one where the assignment is 
+ * Which happens to be the code line just AFTER the one where the assignment is
  * made to *addr in the main function.
  */
 void
@@ -41,7 +41,7 @@ hard_fault_handler(void)
 {
     printf("                    =HARD FAULT=\n");
     printf("Press a key to reset\n");
-    while ((USART_SR(USART3) & USART_SR_RXNE) == 0) ;
+    while ((USART_SR(USART3) & USART_SR_RXNE) == 0);
     scb_reset_system();
 }
 
@@ -83,7 +83,7 @@ draw_pixel(int x, int y, uint16_t color)
     ((LTDC_ ## reg ##_## field ##_MASK) << LTDC_## reg ##_## field ##_SHIFT)
 
 
-void lcd_init(uint8_t *framebuffer);
+void this_lcd_init(uint8_t *framebuffer);
 
 #define LCD_FORMAT_LANDSCAPE
 
@@ -220,9 +220,9 @@ void init_display(void);
 #define UINT	(unsigned int)
 
 /*
- * This sends a command through the DSI to the display, either it has 2 
+ * This sends a command through the DSI to the display, either it has 2
  * parameters which can be sent with a single write, or it has more than 2
- * in which case we push them into the FIFO and then send a "long" write 
+ * in which case we push them into the FIFO and then send a "long" write
  * with the number of args.
  *
  * If length is 1 it is a special case we just delay for *(args) milliseconds.
@@ -240,17 +240,17 @@ send_command(uint8_t n_arg, const uint8_t *args)
 	char cmd;
 
 	switch (n_arg) {
-		case 0:
-			cmd = 'E';
-			break;
-		case 1:
-			cmd = 'D';
-			break;
-		case 2:
-			cmd = 'S';
-			break;
-		default:
-			cmd = 'L';
+	case 0:
+		cmd = 'E';
+		break;
+	case 1:
+		cmd = 'D';
+		break;
+	case 2:
+		cmd = 'S';
+		break;
+	default:
+		cmd = 'L';
 	}
 
 	printf("    CMD: %c: ", cmd);
@@ -267,8 +267,8 @@ send_command(uint8_t n_arg, const uint8_t *args)
 	}
 
 	/* wait for previous command to drain */
-	while ((DSI_GPSR & DSI_GPSR_CMDFE) == 0) ;
-	
+	while ((DSI_GPSR & DSI_GPSR_CMDFE) == 0);
+
 	/* if we only have two parameters, send a short write */
 	/* ### SWAP MSB/LSB */
 	if (n_arg == 2) {
@@ -285,7 +285,7 @@ send_command(uint8_t n_arg, const uint8_t *args)
 		DSI_GHCR = tmp;
 	} else {
 		i = 0;
-		while (i < n_arg ) {
+		while (i < n_arg) {
 			tmp = *(args + i++);
 			if (i < n_arg) {
 				tmp |= (*(args + i++) << 8);
@@ -323,7 +323,7 @@ send_command(uint8_t n_arg, const uint8_t *args)
  *
  * I've extracted  all of the commands that are sent (combination
  * of the data sheet and the ST examples) and put them into an array
- * of the form 
+ * of the form
  *		[length], [data0], ... [datan],
  * Since every command has at least two bytes, if length is 1 then
  * that means delay [data0] milliseconds. If length is 0 it means you
@@ -384,18 +384,18 @@ void ltdc_layer_setup(uint8_t *fb);
  * This should configure the LTDC controller to to display an 800 x 480 x 4 (ARGB8888)
  * region of memory, which if it goes as planned, will show up as the display contents.
  */
-void 
+void
 ltdc_layer_setup(uint8_t *fb)
 {
 
 	/* Sets up layer 1 as a "full screen" */
-	LTDC_L1WHPCR = LTDC_SET(LxWHPCR, WHSTPOS, (MY_HSYNC + MY_HBP)) | 
+	LTDC_L1WHPCR = LTDC_SET(LxWHPCR, WHSTPOS, (MY_HSYNC + MY_HBP)) |
 				   LTDC_SET(LxWHPCR, WHSPPOS, (MY_HSYNC + MY_HBP + MY_HACT - 1));
 	LTDC_L1WVPCR = LTDC_SET(LxWVPCR, WVSTPOS, (MY_VSYNC + MY_VBP)) |
 			       LTDC_SET(LxWVPCR, WVSPPOS, (MY_VSYNC + MY_VBP + MY_VACT - 1));
-	LTDC_L1PFCR = 0; // ARGB8888
-	LTDC_L1CACR = 0xff; // Constant Alpha 0xff
-	LTDC_L1DCCR = 0x00ff0000; // green as the default layer 1 color
+	LTDC_L1PFCR = 0; /* ARGB8888 */
+	LTDC_L1CACR = 0xff; /* Constant Alpha 0xff */
+	LTDC_L1DCCR = 0x00ff0000; /* green as the default layer 1 color */
 	LTDC_L1BFCR = (0x6 << 8) | 0x7;
 	LTDC_L1CFBAR = (uint32_t) fb;
 	LTDC_L1CFBLR = LTDC_SET(LxCFBLR, CFBP, (800 * 4)) | LTDC_SET(LxCFBLR, CFBLL, (800 * 4) + 3);
@@ -413,7 +413,7 @@ ltdc_layer_setup(uint8_t *fb)
  * on and "clear" (all pixels set to black)
  */
 void
-lcd_init(uint8_t *fb)
+this_lcd_init(uint8_t *fb)
 {
 	uint32_t tmp;
 	uint16_t	n, q, r, p;
@@ -427,13 +427,13 @@ lcd_init(uint8_t *fb)
 	printf("done.\n");
 	printf("Set up PLLSAI ... ");
 	fflush(stdout);
-	/* 
+	/*
 	 * Set up the PLLSAI clock. This clock sets the VCO to 384Mhz
 	 * (HSE / PLLM(8) * NDIV(384) = 384Mhz
 	 * It sets its PLLSAI48CLK to 48Mhz VCO/PLLP = 384 / 8 = 48
-	 * It sets the SAI clock to 11.29Mhz 
+	 * It sets the SAI clock to 11.29Mhz
 	 * It sets the LCD Clock to 48 Mhz as well (div 2 in PLLSAIR, then another 4 in DKCFGR)
- 	 */
+	 */
 	tmp = RCC_PLLSAICFGR;
 	p = 8;
 	q = 34;
@@ -469,7 +469,7 @@ lcd_init(uint8_t *fb)
 	fflush(stdout);
 	/* turn on the voltage regulator to the PHY */
 	DSI_WRPCR |= DSI_WRPCR_REGEN;
-	while ((DSI_WISR & DSI_WISR_RRS) == 0) ;
+	while ((DSI_WISR & DSI_WISR_RRS) == 0);
 	printf(" done.\n");
 
 	/* set up the DSI PLL */
@@ -477,7 +477,7 @@ lcd_init(uint8_t *fb)
 	printf("    Verify DSI is off ... ");
 	fflush(stdout);
 	printf("%s\n", ((DSI_CR & 1) == 0) ? "OFF" : "ON");
-	
+
 	/*
 	 * This configures the clock to the PHY. It is set
 	 * as (((HSE / input divisor) * NDIV) / output divisor)
@@ -488,22 +488,22 @@ lcd_init(uint8_t *fb)
 			    DSI_SET(WRPCR, IDF, DSI_WRPCR_IDF_DIV_2) |
 				DSI_SET(WRPCR, ODF, DSI_WRPCR_ODF_DIV_1);
 	DSI_WRPCR |= DSI_WRPCR_PLLEN;
-	while ((DSI_WISR & DSI_WISR_PLLLS) == 0) ;
+	while ((DSI_WISR & DSI_WISR_PLLLS) == 0);
 	printf("    Done.\n");
 
 	printf("    Setup DSI PHY part ...");
 	fflush(stdout);
 	/* Now that the PHY has power (regulator) and clock
 	 * we can program it.
- 	 * The ST code starts of by enabling them so I do too.
+	 * The ST code starts of by enabling them so I do too.
 	 */
 	DSI_PCTLR = DSI_PCTLR_CKE | DSI_PCTLR_DEN;
 	DSI_CLCR = DSI_CLCR_DPCC;
 	DSI_PCONFR |= DSI_SET(PCONFR, NL, DSI_PCONFR_NL_2LANE); /* two lanes */
 
-	/* Set the the "escape" clock divisor, RM0386 says it's 20Mhz 
+	/* Set the the "escape" clock divisor, RM0386 says it's 20Mhz
 	 * maximum, and it is fed by the Phy clock / 8 (62.5Mhz) so we
- 	 * divide by 4 to make it 15.6Mhz (which is < 20Mhz)
+	 * divide by 4 to make it 15.6Mhz (which is < 20Mhz)
 	 */
 	DSI_CCR = DSI_SET(CCR, TXECKDIV, 4);
 	DSI_WPCR0 &= ~(DSI_MASK(WPCR0, UIX4));
@@ -516,15 +516,15 @@ lcd_init(uint8_t *fb)
 	DSI_IER0 = 0;
 	DSI_IER1 = 0;
 	printf("Initialization done\n");
-	
+
 	printf("Put DSI into Command mode ...\n");
 	DSI_MCR |= DSI_MCR_CMDM;
-	/* 
+	/*
 	 * Set the color mode in two places, in the wrapper device (WFCGR)
 	 * and in the DSI Host (LCOLCR)
 	 * DSI Wrapper color mode (this is LTDC -> DSI Host)
 	 */
-	DSI_WCFGR = DSI_WCFGR_DSIM | DSI_SET(WCFGR, COLMUX, 5); 
+	DSI_WCFGR = DSI_WCFGR_DSIM | DSI_SET(WCFGR, COLMUX, 5);
 	/* DSI host color mode (this is DSI -> display) of RGB 888 */
 	DSI_LCOLCR = 5; /* RGB888 mode */
 
@@ -534,14 +534,14 @@ lcd_init(uint8_t *fb)
 
 
 	/* Largest command size is one line of pixels (800 in this case) */
-	DSI_LCCR |= DSI_SET(LCCR, CMDSIZE, 800); 
+	DSI_LCCR |= DSI_SET(LCCR, CMDSIZE, 800);
 	DSI_CMCR |= DSI_CMCR_TEARE;
 
 	/* enable interrupts for tear and refresh */
 	/* xxx TODO: verify nvic has the dsi and ltdc interrupt
 	   vectors populated.
 		DSI_WIER_TEIE
-		DSI_WIER_ERIE 
+		DSI_WIER_ERIE
     */
 	printf("Done\n");
 
@@ -550,7 +550,7 @@ lcd_init(uint8_t *fb)
 				DSI_CMCR_GLWTX | DSI_CMCR_GSR2TX | DSI_CMCR_GSR1TX | DSI_CMCR_GSR0TX |
 				DSI_CMCR_GSW2TX | DSI_CMCR_GSW1TX | DSI_CMCR_GSW0TX ;
 
-	/* 
+	/*
 	 * Now the DSI Host is pretty much set up, so we need to initialize the LTDC.
 	 * Note that if the DSI Wrapper is enabled (Bit DSIEN in DSI_WCR) you can't
 	 * access the LTDC. So we have to work on it with the wrapper disabled
@@ -562,9 +562,9 @@ lcd_init(uint8_t *fb)
 	LTDC_SSCR = (MY_HSYNC - 1) << 16 | (MY_VSYNC - 1);
 	LTDC_BPCR = LTDC_SET(BPCR, AHBP, (MY_HSYNC + MY_HBP - 1)) |
 				LTDC_SET(BPCR, AVBP, (MY_VSYNC + MY_VBP - 1)) ;
-	LTDC_AWCR = LTDC_SET(AWCR, AAW, (MY_HSYNC + MY_HBP + MY_HACT - 1)) | 
+	LTDC_AWCR = LTDC_SET(AWCR, AAW, (MY_HSYNC + MY_HBP + MY_HACT - 1)) |
 			    LTDC_SET(AWCR, AAH, (MY_VSYNC + MY_VBP + MY_VACT - 1));
-	LTDC_TWCR = LTDC_SET(TWCR, TOTALW, (MY_HSYNC + MY_HFP + MY_HACT + MY_HBP - 1)) | 
+	LTDC_TWCR = LTDC_SET(TWCR, TOTALW, (MY_HSYNC + MY_HFP + MY_HACT + MY_HBP - 1)) |
 				LTDC_SET(TWCR, TOTALH, (MY_VSYNC + MY_VFP + MY_VACT + MY_VBP - 1));
 	/*
 	 * Default background color is non-black so you can see if if your layer setup
@@ -575,7 +575,7 @@ lcd_init(uint8_t *fb)
 	/* Turn it on */
 	LTDC_GCR |= LTDC_GCR_LTDCEN;
 	printf("Done\n");
-	
+
 	/*
 	 * Now program the Layer 1 registers to show our frame buffer (which is
 	 * the first 1.5MB of SDRAM) as an 800 x 480 x 4 byte ARGB888 buffer.
@@ -586,7 +586,7 @@ lcd_init(uint8_t *fb)
 	DSI_CR |= DSI_CR_EN;
 	DSI_WCR |= DSI_WCR_DSIEN;
 
-	/* 
+	/*
 	 * At this point we have the DSI Host, the DSI Phy,  the LTDC, and the
 	 * DSI wrapper all set up. So we can now send commands through this
 	 * "pipe" into the display connected to the DSI host. (this is very
@@ -600,12 +600,12 @@ lcd_init(uint8_t *fb)
 	printf("\ndone.\n");
 
 	/* reset the commands to all be high power only now? */
-	DSI_CMCR &= ~( DSI_CMCR_DLWTX | DSI_CMCR_DSR0TX | DSI_CMCR_DSW1TX | DSI_CMCR_DSW0TX |
+	DSI_CMCR &= ~(DSI_CMCR_DLWTX | DSI_CMCR_DSR0TX | DSI_CMCR_DSW1TX | DSI_CMCR_DSW0TX |
 				   DSI_CMCR_GLWTX | DSI_CMCR_GSR2TX | DSI_CMCR_GSR1TX | DSI_CMCR_GSR0TX |
-				   DSI_CMCR_GSW2TX | DSI_CMCR_GSW1TX | DSI_CMCR_GSW0TX ) ;
+				   DSI_CMCR_GSW2TX | DSI_CMCR_GSW1TX | DSI_CMCR_GSW0TX) ;
 	DSI_PCR |= DSI_PCR_BTAE; /* flow control */
 
-	/* And now when you tell the DSI Wrapper to enable the LTDC it 
+	/* And now when you tell the DSI Wrapper to enable the LTDC it
 	 * un "pauses" it and the LTDC generates one frame of display.
 	 * that frame is captured by the wrapper and fed into the LCD
 	 * display and the LTDC is re-paused. (this is Adapted Command
@@ -618,14 +618,6 @@ lcd_init(uint8_t *fb)
 	 */
 }
 
-
-#define show_status(cond, ok, notok)	if ((cond)) \
-			{ printf("%s%s%s, ", console_color(GREEN), ok, console_color(NONE)); } else \
-			{ printf("%s%s%s, ", console_color(YELLOW), notok, console_color(NONE)); }
-
-/* Macros to turn off and on the DSI Wrapper */
-#define wrap_disable	DSI_WCR &= ~DSI_WCR_DSIEN
-#define wrap_enable		DSI_WCR |= DSI_WCR_DSIEN
 
 void flip(int te_lock);
 
@@ -644,8 +636,8 @@ void
 flip(int te_lock)
 {
 	/* Wait for DSI to be not busy */
-	while (DSI_WISR & DSI_WISR_BUSY) ;
-	
+	while (DSI_WISR & DSI_WISR_BUSY);
+
 #if 0
 /*	DSI_WIFCR = DSI_WIFCR_CTEIF; */
 	while ((DSI_WISR & DSI_WISR_TEIF) == 0) {
@@ -654,7 +646,7 @@ flip(int te_lock)
 #endif
 	/* Attempt 2, monitor the GPIO pin */
 	if (te_lock) {
-		while (gpio_get(GPIOJ, GPIO2)  == 0) ;
+		while (gpio_get(GPIOJ, GPIO2)  == 0);
 	}
 	DSI_WCR |= DSI_WCR_LTDCEN;
 }
@@ -726,245 +718,250 @@ simple_graphics(void)
 	gfx_setTextSize(1);
 	gfx_setCursor(180, 420);
 	gfx_puts((unsigned char *) "At scale = 1, small font is hard to read.");
-	
+
+}
+
+void animation_test(int lock);
+
+void
+animation_test(int lock)
+{
+	int i, r1, r2, x, y;
+	uint32_t *buf = (uint32_t *)(FB_ADDRESS);
+	uint32_t t0, t1, dt;
+	char fps[25];
+
+	r1 = 0;
+	r2 = 0;
+	gfx_setTextColor(GFX_COLOR_YELLOW, 0);
+	gfx_setFont(GFX_FONT_LARGE);
+	gfx_setTextSize(2);
+	t0 = t1 = mtime();
+	snprintf(fps, 25, "*** FPS");
+	while (console_getc(0) == 0) {
+		for (i = 0; i < 800 * 480; i++) {
+			*(buf + i) = 0xff000000;
+		}
+		/* gfx_fillScreen(0x0); */
+		gfx_setCursor(250, 100);
+		gfx_puts((unsigned char *)"Some Planets");
+		gfx_fillCircle(400, 240, 50, GFX_COLOR_BLUE);
+		r1 = (r1 + 12) % 360;
+		r2 = (r2 + 6) % 360;
+		x = sin((float) r1 / 180.0 * 3.14159) * 100;
+		y = cos((float) r1 / 180.0 * 3.14159) * 100;
+		gfx_fillCircle(400 + x, 240 + y, 15, 0x7bef);
+		x = sin((float) r2 / 180.0 * 3.14159) * 150;
+		y = cos((float) r2 / 180.0 * 3.14159) * 150;
+		gfx_fillCircle(400 + x, 240 + y, 25, GFX_COLOR_RED);
+		/* every 60 frames this hits 0 */
+		if (r2 == 0) {
+			t1 = mtime();
+			dt = t1 - t0;
+			t0 = t1;
+			/* delta t is in milliseconds, so 1000 * 60 / dt = FPS */
+			snprintf(fps, 25, "%5.2f FPS", 60000.0 / (float) (dt));
+		}
+		gfx_setCursor(500, 400);
+		gfx_puts((unsigned char *) fps);
+		flip(lock);
+	}
+}
+
+
+static void
+gen_grid(void)
+{
+	int	t, x, y;
+	uint32_t pixel;
+	uint32_t *buf = (uint32_t *)(FB_ADDRESS);
+
+	printf("Grid\n");
+	printf("Enter grid size : ");
+	fflush(stdout);
+	t = console_getnumber();
+	printf("\n");
+	for (y = 0; y < 480;  y++) {
+		for (x = 0; x < 800; x++) {
+			pixel = 0xff000000; /* black */
+			if (((x % t) == 0) || ((y % t) == 0) || (x == 799) || (y == 479)) {
+				pixel = 0xffffffff; /* white */
+			}
+			*(buf + y * 800 + x) = pixel;
+		}
+	}
+}
+
+
+static void
+gen_bars(void)
+{
+	int x, y;
+	uint32_t pixel;
+	uint32_t *buf = (uint32_t *)(FB_ADDRESS);
+
+	printf("Color Bars\n");
+	for (y = 0; y < 480; y++) {
+		for (x = 0; x < 800; x++) {
+			pixel = 0;
+			if (y < 400) {
+				pixel = color_bars[(x / 66) % 12];
+			} else if (y > 410) {
+				pixel = (x / 3) & 0xff;
+				pixel = (pixel << 8) | pixel;
+				pixel = (pixel << 8) | pixel;
+			}
+			pixel |= 0xff000000;
+			*(buf + y * 800 + x) = pixel;
+		}
+	}
+}
+
+static void
+mem_explore(void)
+{
+	uint32_t addr;
+	int c;
+
+	addr = FB_ADDRESS;
+	while (1) {
+		hex_dump(addr, (uint8_t *)(addr), 256);
+		printf("CMD> ");
+		fflush(stdout);
+		c = console_getc(1);
+		if (c == '\033') {
+			break;
+		}
+		switch (c) {
+		case 'n':
+			addr += 256;
+			break;
+		case 'p':
+			addr -= 256;
+			break;
+		case 'j':
+			printf("Jump to address: ");
+			fflush(stdout);
+			addr = console_getnumber();
+			break;
+		default:
+			printf("n - next page\n");
+			printf("p - previous page\n");
+			printf("j - jump to specified address (hex entry is allowed)");
+			printf("    legal range 0xc0000000 - 0xc0ffff00\n");
+			break;
+		}
+		printf("\n");
+		if ((addr+256) > 0xc0ffffff) {
+			addr = 0xc0ffff00;
+		}
+		if ((addr) < 0xc0000000) {
+			addr = 0xc0000000;
+		}
+	}
 }
 
 int
 main(void)
 {
-	int t, r1, r2, c, x, y;
 	unsigned int	i;
 	uint32_t	*buf = (uint32_t *)(FB_ADDRESS);
 	uint32_t	col;
-	uint32_t	addr;
-	uint32_t	pixel;
 
 	uint32_t	*test_buf;
 	uint32_t	test_val;
-	char fps[25];
 
 
 	fprintf(stderr, "LTDC/DSI Demo Program\n");
 	gpio_init();
-	/* 
+	/*
 	 * If we did this right, this fills the initial
 	 * image frame buffer with a white grid on a black
 	 * background.
 	 */
 	gfx_init(draw_pixel, 800, 480, GFX_FONT_LARGE);
 	simple_graphics();
-	
-	lcd_init((uint8_t *)FB_ADDRESS);
+
+	this_lcd_init((uint8_t *)FB_ADDRESS);
 
 	/* Note you can't adjust the LTDC if the DSI Wrapper is enabled! */
 	DSI_WCR |= (DSI_WCR_DSIEN | DSI_WCR_LTDCEN);
 
-	
+
 	printf("Anything interesting?\n");
 	col = DSI_WCFGR;
 	printf("DSI Wrapper configuration : 0x%08X\n", (unsigned int) col);
 	printf("DSI_WCFGR = 0x%08X\n", UINT DSI_WCFGR);
 	printf("DSI_LCOLCR = 0x%08X\n", UINT DSI_LCOLCR);
-	
+
 	while (1) {
 		char xc;
-		uint32_t t1, t0, dt;
 
 		while (1) {
 			xc = console_getc(1);
 			switch (xc) {
-				case 'A':
-					printf("Animation test (TE unlocked).\n");
-					tear_lock = 0;
-					r1= 0;
-					r2 = 0;
-					gfx_setTextColor(GFX_COLOR_YELLOW, 0);
-					gfx_setFont(GFX_FONT_LARGE);
-					gfx_setTextSize(2);
-					t0 = t1 = mtime();
-					snprintf(fps, 25, "*** FPS");
-					while (console_getc(0) == 0) {
-						for (i = 0; i < 800 * 480; i++) {
-							*(buf + i) = 0xff000000;
-						}
-						gfx_setCursor(250, 100);
-						gfx_puts((unsigned char *)"Some Planets");
-						gfx_fillCircle(400, 240, 50, GFX_COLOR_BLUE);
-						r1= (r1 + 12) % 360;
-						r2= (r2 + 6) % 360;
-						x = sin((float) r1 / 180.0 * 3.14159) * 100;
-						y = cos((float) r1 / 180.0 * 3.14159) * 100;
-						gfx_fillCircle(400 + x, 240 + y, 15, 0x7bef);
-						x = sin((float) r2 / 180.0 * 3.14159) * 150;
-						y = cos((float) r2 / 180.0 * 3.14159) * 150;
-						gfx_fillCircle(400 + x, 240 + y, 25, GFX_COLOR_RED);
-						/* every 60 frames this hits 0 */
-						if (r2 == 0) {
-							t1 = mtime();
-							dt = t1 - t0;
-							t0 = t1;
-							/* delta t is in milliseconds, so 1000 * 60 / dt = FPS */
-							snprintf(fps, 25, "%5.2f FPS", 60000.0 / (float) (dt));
-						}
-						gfx_setCursor(500, 400);
-						gfx_puts((unsigned char *) fps);
-						flip(0);
+			case 'A':
+				printf("Animation test (TE unlocked).\n");
+				animation_test(0);
+				break;
+			case 'a':
+				printf("Animation test (TE locked).\n");
+				animation_test(1);
+				break;
+
+			case 'C':
+				printf("Enter fill color: ");
+				fflush(stdout);
+				col = console_getnumber();
+				printf("\n");
+				for (i = 0; i < 800 * 480; i++) {
+					*(buf + i) = col;
+				}
+				break;
+			case 'g':
+				gen_grid();
+				break;
+			case 'c':
+				gen_bars();
+				break;
+			case 't':
+				/* This is pretty contrived, just to show the primitives */
+				printf("GFX Test Output\n");
+				simple_graphics();
+				break;
+			case 'e':
+				/* memory explorer */
+				mem_explore();
+				break;
+			case 'm':
+				test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
+				printf("Testing Memory\n");
+				for (test_val = 0; test_val < 1000000; test_val++) {
+					*test_buf++ = test_val;
+				}
+				test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
+				for (test_val = 0; test_val < 1000000; test_val++) {
+					if (*test_buf != test_val) {
+						printf("Memory should have %u, but instead has %u\n", (unsigned int) test_val,
+							(unsigned int) *test_buf);
 					}
-					break;
-				case 'a':
-					printf("Animation test (TE locked).\n");
-					tear_lock = 1;
-					r1= 0;
-					r2 = 0;
-					gfx_setTextColor(GFX_COLOR_YELLOW, 0);
-					gfx_setFont(GFX_FONT_LARGE);
-					gfx_setTextSize(2);
-					t0 = t1 = mtime();
-					snprintf(fps, 25, "*** FPS");
-					while (console_getc(0) == 0) {
-						for (i = 0; i < 800 * 480; i++) {
-							*(buf + i) = 0xff000000;
-						}
-						/* gfx_fillScreen(0x0); */
-						gfx_setCursor(250, 100);
-						gfx_puts((unsigned char *)"Some Planets");
-						gfx_fillCircle(400, 240, 50, GFX_COLOR_BLUE);
-						r1= (r1 + 12) % 360;
-						r2= (r2 + 6) % 360;
-						x = sin((float) r1 / 180.0 * 3.14159) * 100;
-						y = cos((float) r1 / 180.0 * 3.14159) * 100;
-						gfx_fillCircle(400 + x, 240 + y, 15, 0x7bef);
-						x = sin((float) r2 / 180.0 * 3.14159) * 150;
-						y = cos((float) r2 / 180.0 * 3.14159) * 150;
-						gfx_fillCircle(400 + x, 240 + y, 25, GFX_COLOR_RED);
-						/* every 60 frames this hits 0 */
-						if (r2 == 0) {
-							t1 = mtime();
-							dt = t1 - t0;
-							t0 = t1;
-							/* delta t is in milliseconds, so 1000 * 60 / dt = FPS */
-							snprintf(fps, 25, "%5.2f FPS", 60000.0 / (float) (dt));
-						}
-						gfx_setCursor(500, 400);
-						gfx_puts((unsigned char *) fps);
-						flip(1);
-					}
-					break;
-						
-				case 'C':
-					printf("Enter fill color: ");
-					fflush(stdout);
-					col = console_getnumber();
-					printf("\n");
-					for (i = 0; i < 800 * 480; i++) {
-						*(buf + i) = col;
-					}
-					break;
-				case 'g':
-					printf("Grid\n");
-					printf("Enter grid size : ");
-					fflush(stdout);
-					t = console_getnumber();
-					printf("\n");
-					for (y = 0; y < 480;  y++) {
-						for (x = 0; x < 800; x++) {
-							pixel = 0xff000000; /* black */
-							if (((x % t) == 0) || ((y % t) == 0) ||
-								(x == 799) || (y == 479)) {
-								pixel = 0xffffffff; /* white */
-							}
-							*(buf + y * 800 + x) = pixel;
-						}
-					}
-					break;
-				case 'c':
-					printf("Color Bars\n");
-					for (y = 0; y < 480; y++) {
-						for (x = 0; x < 800; x++) {
-							pixel = 0;
-							if (y < 400) {
-								pixel = color_bars[(x / 66) % 12];
-							} else if (y > 410) {
-								pixel = (x / 3) & 0xff;
-								pixel = (pixel << 8) | pixel;
-								pixel = (pixel << 8) | pixel;
-							}
-							pixel |= 0xff000000;
-							*(buf + y * 800 + x) = pixel;
-						}
-					}
-					break;
-				case 't':
-					/* This is pretty contrived, just to show the primitives */
-					printf("GFX Test Output\n");
-					simple_graphics();
-					break;
-				case 'e':
-					/* memory explorer */
-					addr = FB_ADDRESS;
-					while (1) {
-						hex_dump(addr, (uint8_t *)(addr), 256);
-						printf("CMD> ");
-						fflush(stdout);
-						c = console_getc(1);
-						if (c == '\033') {
-							break;
-						}
-						switch (c) {
-							case 'n':
-								addr += 256;
-								break;
-							case 'p':
-								addr -= 256;
-								break;
-							case 'j':
-								printf("Jump to address: ");
-								fflush(stdout);
-								addr = console_getnumber();
-								break;
-							default:
-								printf("n - next page\n");
-								printf("p - previous page\n");
-								printf("j - jump to specified address (hex entry is allowed)");
-								printf("    legal range 0xc0000000 - 0xc0ffff00\n");
-								break;
-						}
-						printf("\n");
-						if ((addr+256) > 0xc0ffffff) {
-							addr = 0xc0ffff00;
-						}
-						if ((addr) < 0xc0000000) {
-							addr = 0xc0000000;
-						}
-					}
-					break;
-				case 'm':
-					test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
-					printf("Testing Memory\n");
-					for (test_val = 0; test_val < 1000000; test_val++) {
-						*test_buf++ = test_val;
-					}
-					test_buf = (uint32_t *)(SDRAM_BASE_ADDRESS);
-					for (test_val = 0; test_val < 1000000; test_val++) {
-						if (*test_buf != test_val) {
-							printf("Memory should have %u, but instead has %u\n", (unsigned int) test_val,
-								(unsigned int) *test_buf);
-						}
-						test_buf++;
-					}
-					break;
-				default:
-				case '?':
-					printf("\nFunctions/cmds :\n");
-					printf("    g - create a grid of specified size\n");
-					printf("    C - fill with specified color (0xffffff is white)\n");
-					printf("    t - Show the simple graphics test\n");
-					printf("    c - Show basic color bars\n");
-					printf("    e - Start the memory explorer (esc to exit)\n");
-					printf("    m - Run a simple memory test on SDRAM memory\n");
-					break;
+					test_buf++;
+				}
+				break;
+			default:
+			case '?':
+				printf("\nFunctions/cmds :\n");
+				printf("    g - create a grid of specified size\n");
+				printf("    C - fill with specified color (0xffffff is white)\n");
+				printf("    t - Show the simple graphics test\n");
+				printf("    c - Show basic color bars\n");
+				printf("    e - Start the memory explorer (esc to exit)\n");
+				printf("    m - Run a simple memory test on SDRAM memory\n");
+				printf("    A - Animation test (TE unlocked)\n");
+				printf("    a - Animation test (TE locked)\n");
+				break;
 			}
-			flip();
+		flip(1);
 		}
 	}
 }
