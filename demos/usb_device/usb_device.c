@@ -20,8 +20,7 @@
 #include <stdlib.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
-/* #include <libopencm3/stm32/usb_otg.h> */
-#include "usb_otg.h"
+#include <libopencm3/stm32/usb_otg.h>
 
 void setup_usb(void);
 void init_usb(void);
@@ -54,6 +53,7 @@ int main(void)
 {
     printf("USB Device Demo\n");
     printf("Setting up CDC device\n");
+	init_usb_device(&acm);
     setup_usb();
     return 0;
 }
