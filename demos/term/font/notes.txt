@@ -1,0 +1,20 @@
+Font generation
+---------------
+
+Clearly we can generate glyphs with existing font files
+if we use the freetype library. Now to decide what we
+really want to do. Is it to get every glyph inside a
+10 x 19 box? We can do that by scaling the font for
+glyphs that fall outside that box.
+
+Every glyph that exceeds 9 x 18 gets scaled? (leaves
+one pixel between)
+
+Working through the exclamation point issue:
+
+Passed in origin (x, y) => (2, 12)
+Cell properties H = 19, W = 10, BL = 5
+Glyph size (w, h) => (4, 13)
+Glyph box (sx, sy) => (ex, ey) : (2, 30) => (6, 2)
+
+
