@@ -7,14 +7,7 @@
 #include <libopencm3/stm32/dma2d.h>
 #include <gfx.h>
 #include "../util/util.h"
-
-#ifndef NULL
-#define NULL	((void *) 0)
-#endif
-
-#define CHAR_WIDTH 10
-#define CHAR_HEIGHT 19
-#define LINE_SPACE 19 
+#include "term.h"
 
 /* This gives 4 equal tempered grey levels 0, 55, aa, ff */
 const uint32_t __term_color_table[16] = {
@@ -36,75 +29,138 @@ const uint32_t __term_color_table[16] = {
 	0xffffffff	/* F: white */
 };
 
-#define TERM_COLOR_BLACK	0
-#define TERM_COLOR_RED		1
-#define TERM_COLOR_GREEN	2
-#define TERM_COLOR_BLUE		3
-#define TERM_COLOR_YELLOW	4
-#define TERM_COLOR_CYAN		5
-#define TERM_COLOR_MAGENTA	6
-#define TERM_COLOR_DKGREY	7
-#define TERM_COLOR_LTGREY	8
-#define TERM_COLOR_BRED		9
-#define TERM_COLOR_BGREEN	10
-#define TERM_COLOR_BBLUE	11
-#define TERM_COLOR_BYELLOW	12
-#define TERM_COLOR_BCYAN	13
-#define TERM_COLOR_BMAGENTA	14
-#define TERM_COLOR_WHITE	15
+/*
+ * An experiment in rendering. Rendering from
+ * a buffer with out of buffer attributes.
+ * That works, but its easy to have the attributes
+ * and characters get out of sync. And writing both
+ * character and attributes is two stores instead of
+ * one.
+ *
+ * A "character mode" frame buffer would be useful as
+ * much of the work is algorithmic (insert/delete char/line)
+ * The "new" buffer
+ *
+ *  3       2       1  
+ *	1.......4.......6.......8.......0
+ *  | bg co | fg co | attr  | char  |
+ *	+.......+.......+.......+.......+
+ *
+ *
+ * 
+ */
 
-#define TERM_MAX_COLOR		16
+uint32_t buffer[TERM_WIDTH * TERM_HEIGHT];
 
-extern const uint8_t font_glyphs[128 - 32][CHAR_HEIGHT][CHAR_WIDTH];
-
-
-/* a box size (w) width and (h) height */
-typedef struct _pixblock {
-	int	w;
-	int h;
-} pixel_block;
-
-/* a target for a pixel block */
-typedef struct _pixtarget {
-	int w;
-	int h;
-	uint32_t	addr;
-} pixel_target;
-
-enum cursor_direction {
-	CURSOR_UP,
-	CURSOR_DOWN,
-	CURSOR_RIGHT,
-	CURSOR_LEFT,
-	CURSOR_RETURN,
-	CURSOR_HOME
-};
+extern TERM_FONT regular_font;
+extern TERM_FONT bold_font;
 
 /*
- * Global state on where the
- * cursor is currently.
- *
- * Global cursor state : plus API is easeier
- * 	minus sucks to multi-task/multi-thread.
+ * Global state.
  */
-int current_row;
-int current_col;
 int current_fg_color;
 int current_bg_color;
-pixel_target text_cursor;
+int	current_attrs;
+
+/* Current cursor position */
+struct {
+	int	row;
+	int	col;
+	int	state;	/* blinking or not */
+	uint32_t	addr;
+} text_cursor;
 
 /* function prototypes */
 
-void dma2d_char(char c, int fg, int bg);
-void move_cursor(enum cursor_direction m);
-int get_glyph(pixel_target *tgt, unsigned char c);
-void clear_screen(int bgcolor);
+void dma2d_char(uint32_t glyph, int w, int h, uint32_t addr, uint32_t fg, uint32_t bg);
+uint32_t get_glyph(struct term_font *font, unsigned char c);
+void clear_screen(uint32_t bgcolor);
+int simple_scroll(int lines);
+void fast_scroll(int lines);
+uint32_t render_buffer(int option);
+uint32_t splash_screen(int opt);
 
+/*
+ * Public facing API
+ */
+void term_putc(unsigned char c);
+void term_clear(void);
+void term_set_colors(int fg_color, int bg_color);
+int term_get_fg(void);
+int term_get_bg(void);
+void cursor_move(enum cursor_direction m);
+void cursor_set(int row, int col);
+void term_set_attrs(uint8_t attr);
+
+static const uint8_t __cursor_glyph[CHAR_HEIGHT][CHAR_WIDTH] = {
+	{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x00 },
+	{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+	{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+};
+
+void term_draw_cursor(int on_or_off);
+void term_blink_cursor(void);
+
+void
+term_draw_cursor(int state) {
+	uint32_t addr, buf_char;
+	int fg, bg, t;
+	TERM_FONT *f;
+	uint8_t c, attr;
+
+	if (text_cursor.state == state) {
+		return;
+	}
+	text_cursor.state = state;
+	addr = FRAMEBUFFER_ADDRESS +
+				( text_cursor.row * LINE_SPACE ) * 800 * 4 +
+				(text_cursor.col * CHAR_WIDTH) * 4;
+	if (state) {
+		dma2d_char((uint32_t) (&__cursor_glyph[0][0]), CHAR_WIDTH, CHAR_HEIGHT, 
+					addr, __term_color_table[TERM_COLOR_BCYAN], 0x0);
+	} else {
+		buf_char = buffer[text_cursor.row * TERM_WIDTH + text_cursor.col]; 
+		c = buf_char & 0xff;
+		attr = (buf_char >> 8) & 0xff;
+		fg = (buf_char >> 16) & 0xff;
+		bg = (buf_char >> 24) & 0xff;
+		if (attr & TERM_CHAR_INVERSE) {
+				t = bg; bg = fg; fg = t;
+		}
+		f = (attr & TERM_CHAR_BOLD) ? &bold_font : &regular_font;
+		dma2d_char(get_glyph(f, c), f->w, f->h,
+						   addr, __term_color_table[fg], __term_color_table[bg]);
+	}
+	lcd_flip(0);
+}
+
+void
+term_blink_cursor(void)
+{
+	text_cursor.state ^= 1;
+	term_draw_cursor(text_cursor.state);
+}
 /*
  * clear screen
  */
 void
-clear_screen(int color)
+clear_screen(uint32_t color)
 {
     DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_R2M);
     DMA2D_OPFCCR = 0x0; /* ARGB8888 pixels */
@@ -116,7 +172,49 @@ clear_screen(int color)
 
     /* kick it off */
     DMA2D_CR |= DMA2D_CR_START;
-    while (DMA2D_CR & DMA2D_CR_START);
+}
+
+void
+term_clear(void) {
+    clear_screen(__term_color_table[current_bg_color]);
+}
+
+void
+term_set_colors(int fg, int bg)
+{
+	current_fg_color = fg % TERM_MAX_COLOR;
+	current_bg_color = bg % TERM_MAX_COLOR;
+}
+void
+term_set_attrs(uint8_t attr)
+{
+	current_attrs = attr;
+}
+
+/*
+ * This is a "simple" scroller. It moves data in screen character
+ * buffer and then re-renders the screen.
+ */
+int
+simple_scroll(int lines)
+{
+	int	len;
+	uint32_t *dst, *src;
+
+	len = (TERM_WIDTH * TERM_HEIGHT) - (lines * TERM_WIDTH);
+	dst = &buffer[0];
+	src = &buffer[lines * TERM_WIDTH];
+	while (len--) {
+		*dst = *src;
+		dst++; src++;
+	}
+	for (len = 0; len < TERM_WIDTH; len++) {
+		buffer[(TERM_HEIGHT - 1) * TERM_WIDTH + len] = 
+			(current_bg_color << 24) | (current_fg_color << 16) |
+			(current_attrs << 8) | ' ';
+	}
+	(void) render_buffer(1);
+	return 24;
 }
 
 /*
@@ -132,64 +230,123 @@ clear_screen(int color)
  * Update the text cursor position
  */
 void
-move_cursor(enum cursor_direction m)
+cursor_move(enum cursor_direction m)
 {
 	switch (m) {
 	case CURSOR_UP:
-		current_row = (current_row > 0) ? current_row - 1 : 0;
+		text_cursor.row = (text_cursor.row > 0) ? text_cursor.row - 1 : 0;
 		break;
 	case CURSOR_DOWN:
-		current_row = (current_row < 23) ? current_row + 1 : 23;
+		text_cursor.row = (text_cursor.row < 24) ? text_cursor.row + 1 : simple_scroll(1);
 		break;
 	case CURSOR_LEFT:
-		current_col = (current_col > 0) ? current_col - 1 : 0;
+		text_cursor.col = (text_cursor.col > 0) ? text_cursor.col - 1 : 0;
 		break;
 	case CURSOR_RIGHT:
-		current_col = (current_col < 79) ? current_col + 1 : 79;
+		if (text_cursor.col < 79) {
+			text_cursor.col++;
+		} else {
+			text_cursor.col = 0;
+			cursor_move(CURSOR_DOWN);
+		}
 		break;
 	case CURSOR_RETURN:
-		current_col = 0;
+		text_cursor.col = 0;
 		break;
 	case CURSOR_HOME:
-		current_col = current_row = 0;
+		text_cursor.col = text_cursor.row = 0;
 		break;
 	}
-	text_cursor.w = current_col * CHAR_WIDTH * 4;
-	text_cursor.h = CHAR_HEIGHT;
 	text_cursor.addr = FRAMEBUFFER_ADDRESS +
-				( current_row * LINE_SPACE ) * 800 * 4 +
-				(current_col * CHAR_WIDTH) * 4;
+				( text_cursor.row * LINE_SPACE ) * 800 * 4 +
+				(text_cursor.col * CHAR_WIDTH) * 4;
 }
 
-/* character glpyhs */
-int
-get_glyph(pixel_target *tgt, unsigned char c) {
-	int	ndx = c - 0x20;
-	if (tgt == NULL) {
-		return 1;
+void
+cursor_set(int row, int col) {
+	text_cursor.row = row % TERM_WIDTH;
+	text_cursor.col = col % TERM_HEIGHT;
+	text_cursor.addr = FRAMEBUFFER_ADDRESS +
+				( text_cursor.row * LINE_SPACE ) * 800 * 4 +
+				(text_cursor.col * CHAR_WIDTH) * 4;
+}
+
+/*
+ * character glpyhs
+ *
+ * This code takes a character (0 - 255) and returns
+ * a pointer to a width x height array of bytes that
+ * represent that character in this font. This is "easy"
+ * for the ASCII set, less so for the Latin chars, and
+ * not easy at all for control characters etc which
+ * have no "official" glyph.
+ */
+uint32_t
+get_glyph(TERM_FONT *f, unsigned char c) {
+	return (uint32_t) (f->glyph_data + f->glyphs[c]);
+}
+
+/*
+ * High level API, put a character on the screen
+ */
+void
+term_putc(unsigned char c) {
+	uint32_t fg, bg;
+	TERM_FONT	*f;
+
+	/* process special characters */
+	switch (c) {
+	case '\r':
+		cursor_move(CURSOR_RETURN);
+		return;
+	case '\n':
+		cursor_move(CURSOR_DOWN);
+		return;
+	case 0x08: /* ^H (non-destructive, moves left */
+		cursor_move(CURSOR_LEFT);
+		return;
+	case 0xff: /* DEL (destructive, moves left, writes 'space' */
+		cursor_move(CURSOR_LEFT);
+		return term_putc(' ');
+	case 0x2:
+		current_attrs ^= TERM_CHAR_BOLD;
+		return;
+	case 0xc: /* refresh screen */
+		render_buffer(1);
+		return;
+	default:
+		break;
 	}
-	if ((ndx < 0) || (ndx > 191)) {
-		ndx = 0;
+
+	if (current_attrs & TERM_CHAR_BOLD) {
+		f = &bold_font;
+	} else {
+		f = &regular_font;
 	}
-	tgt->w = CHAR_WIDTH;
-	tgt->h = CHAR_HEIGHT;
-	tgt->addr = (uint32_t)(&font_glyphs[ndx][0][0]);
-	return 0;
+	buffer[text_cursor.row * TERM_WIDTH + text_cursor.col] = 
+		(current_bg_color << 24) | (current_fg_color << 16) | c;
+	if (current_attrs & TERM_CHAR_INVERSE) {
+		bg = __term_color_table[current_fg_color];
+		fg = __term_color_table[current_bg_color];
+	} else {
+		fg = __term_color_table[current_fg_color];
+		bg = __term_color_table[current_bg_color];
+	}
+	dma2d_char(get_glyph(f, c), f->w, f->h, text_cursor.addr, fg, bg);
+	buffer[text_cursor.row * TERM_WIDTH + text_cursor.col] =
+		(current_bg_color << 24) | (current_fg_color << 16) | (current_attrs << 8) | c;
+	cursor_move(CURSOR_RIGHT);
 }
 
 
 /*
- * This function has an issue, it is putting junk in the output frame buffer
- * after the character is about half written.
- * What is more, the junk is "weird" colors, it isn't the green of the FG
- * Color register or the black of the BG color register. 
+ * Lowest level rendering function. It takes a character, an address
+ * and a foreground and background color. It looks up glpyhs in its
+ * table (although from an API perspective it probably shouldn't)
  */
 void
-dma2d_char(char c, int fg, int bg)
+dma2d_char(uint32_t glyph, int w, int h, uint32_t addr, uint32_t fg, uint32_t bg)
 {
-	pixel_target glyph;
-
-	get_glyph(&glyph, c);
 	if (fg == bg) {
 		return; /* invisible character */
 	}
@@ -199,7 +356,7 @@ dma2d_char(char c, int fg, int bg)
 	 * cell (glyph)
 	 */
 	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_M2MWB);
-	DMA2D_NLR = DMA2D_SET(NLR, PL, glyph.w) | DMA2D_SET(NLR, NL, glyph.h);
+	DMA2D_NLR = DMA2D_SET(NLR, PL, w) | DMA2D_SET(NLR, NL, h);
 
 	/* 
 	 * Point FG and BG to the character glyph, with BG_COLR set to the background
@@ -208,20 +365,20 @@ dma2d_char(char c, int fg, int bg)
 	 */
 	DMA2D_BGPFCCR = DMA2D_SET(BGPFCCR, CM, DMA2D_FGPFCCR_CM_A8) | DMA2D_SET(BGPFCCR, AM, 1) |
 					DMA2D_SET(BGPFCCR, ALPHA, 0xff);
-	DMA2D_BGMAR = glyph.addr;
+	DMA2D_BGMAR = glyph;
 	DMA2D_BGOR = 0;
-	DMA2D_BGCOLR = __term_color_table[bg % TERM_MAX_COLOR];
+	DMA2D_BGCOLR = bg;
 
 	DMA2D_FGPFCCR = DMA2D_SET(FGPFCCR, CM, DMA2D_FGPFCCR_CM_A8) | DMA2D_SET(FGPFCCR, AM, 2) |
 					DMA2D_SET(FGPFCCR, ALPHA, 0xff);
-	DMA2D_FGMAR = glyph.addr;
+	DMA2D_FGMAR = glyph;
 	DMA2D_FGOR = 0;
-	DMA2D_FGCOLR = __term_color_table[fg % TERM_MAX_COLOR];
+	DMA2D_FGCOLR = fg;
 
 	/* Set the output to put it into the frame buffer */
 	DMA2D_OPFCCR = DMA2D_OPFCCR_CM_ARGB8888;
-	DMA2D_OMAR = text_cursor.addr;
-	DMA2D_OOR = 800 - glyph.w;
+	DMA2D_OMAR = addr;
+	DMA2D_OOR = 800 - w;
 	DMA2D_CR |= DMA2D_CR_START;
 	if (DMA2D_ISR & DMA2D_ISR_CEIF) {
 		printf("DMA2D Configuration Error!\n");
@@ -229,98 +386,82 @@ dma2d_char(char c, int fg, int bg)
 	}
 }
 
-void screen_puts(char *s);
+void term_puts(char *s);
 
 void
-screen_puts(char *s)
+term_puts(char *s)
 {
 	while (*s != 0) {
-		switch (*s) {
-		case '\n':
-			move_cursor(CURSOR_RETURN);
-			move_cursor(CURSOR_DOWN);
-			break;
-		default:
-			dma2d_char(*s, current_fg_color, current_bg_color);
-			move_cursor(CURSOR_RIGHT);
-			lcd_flip(0);	/* update per character or after the string? */
-			break;
+		term_putc(*s);
+		if (*s == '\n') {
+			term_putc('\r');
 		}
 		s++;
 	}
 }
 
 /*
- * An experiment in rendering. Rendering from
- * a buffer with out of buffer attributes.
- * That works, but its easy to have the attributes
- * and characters get out of sync. And writing both
- * character and attributes is two stores instead of
- * one.
+ * There are two ways to render the character buffer.
+ * you can either just go through every spot in the
+ * render buffer and render that glpyh (1,280 separate
+ * DMA2D transactions. Or you can clear the entire
+ * screen to "space", (1 DMA2D transaction) and then
+ * render only those characters in the buffer that
+ * are either not ' ', or are ' ' with different
+ * attributes than the defaults.
  *
- * A "character mode" frame buffer would be useful as
- * much of the work is algorithmic (insert/delete char/line)
- * The "new" buffer
- *  3       2       1  
- *	1.......4.......6.......8.......0
- *  | bg co | fg co | attr  | char  |
- *	+.......+.......+.......+.......+
- *
- *
- * 
+ * We'll benchmark both kinds
+ *	If opt == 0 - every character cell is written
+ *				  and there is no "pre-clear"
+ *	If opt != 0 - Pre-clear to space + bg_color and
+ *				  only render if buffer isn't a space
+ *				  or the bg color is different.
  */
-#define SCREEN_WIDTH	80
-#define SCREEN_HEIGHT	25
-
-uint32_t buffer[SCREEN_WIDTH * SCREEN_HEIGHT];
-
-void render_buffer(int opt);
-void
+uint32_t
 render_buffer(int opt)
 {
 	int row, col;
 	uint32_t t0, t1;
-	uint32_t fg, bg;
+	int fg, bg, t;
+	TERM_FONT	*f;
+	uint32_t	addr;
+	uint32_t	buf_char;
+	uint8_t		attr;
 	unsigned char c;
-	uint16_t	attr;
 
 	t0 = mtime();
-	clear_screen(current_bg_color);
-	for (row = 0; row < SCREEN_HEIGHT; row ++) {
-		for (col = 0; col < SCREEN_WIDTH; col++) {
-			attr = (buffer[ row * SCREEN_WIDTH + col] >> 16) & 0xffff;
-			if (attr == 0) {
-				attr = (current_bg_color << 8) | (current_fg_color);
+	if (opt) {
+		clear_screen(current_bg_color);
+	}
+	for (row = 0; row < TERM_HEIGHT; row ++) {
+		for (col = 0; col < TERM_WIDTH; col++) {
+			buf_char = buffer[ row * TERM_WIDTH + col];
+			/* this is a safety check */
+			if ((buf_char & 0xffff0000) == 0) {
+				buf_char |= (current_bg_color << 24) | (current_fg_color << 16);
 			}
-			c = buffer[row * SCREEN_WIDTH + col] & 0xff;
-			bg = (attr >> 8) & 0xff;
-			fg = attr & 0xff;
-			switch (opt) {
-			case 0: /* render none */
-					break;
-			case 1:	/* render all */
-				text_cursor.addr = FRAMEBUFFER_ADDRESS +
-						( row * LINE_SPACE ) * 800 * 4 +
+			/* pull out current attributes and colors */
+			c = buffer[row * TERM_WIDTH + col] & 0xff;
+			attr = (buf_char >> 8) & 0xff;
+			fg = (buf_char >> 16) & 0xff;
+			bg = (buf_char >> 24) & 0xff;
+			if ((opt == 0) || (c != ' ') || (bg != current_bg_color)) {
+				addr = FRAMEBUFFER_ADDRESS + ( row * LINE_SPACE ) * 800 * 4 +
 						( col * CHAR_WIDTH) * 4;
-				dma2d_char(c, fg, bg);
-				break;
-			default: /* render non-space */
-				if (c != ' ') {
-					text_cursor.addr = FRAMEBUFFER_ADDRESS +
-						( row * LINE_SPACE ) * 800 * 4 +
-						( col * CHAR_WIDTH) * 4;
-						dma2d_char(c, fg, bg);
+				if (attr & TERM_CHAR_INVERSE) {
+					t = bg; bg = fg; fg = t;
 				}
-				break;
+				f = (attr & TERM_CHAR_BOLD) ? &bold_font : &regular_font;
+				dma2d_char(get_glyph(f, c), f->w, f->h,
+						   addr, __term_color_table[fg], __term_color_table[bg]);
 			}
 		}
 	}
 	lcd_flip(0);
 	t1 = mtime();
-	printf("Time to render (opt = %d) screen %d mS\n", opt, (int)(t1 - t0));
+	return (t1 - t0);
 }
 
-void splash_screen(void);
 
 static struct {
 	int row;
@@ -383,11 +524,6 @@ static struct {
 	{ 17, 69,
 		"White",
 		TERM_COLOR_WHITE, TERM_COLOR_BLACK },
-/*
-	{ 19, 5,
-		"Simple code frag $a = { 32.0 / (2 * 6) << 1 } | foo;",
-		TERM_COLOR_BGREEN, TERM_COLOR_BLACK },
-*/
 	{ -1, -1,
 		NULL,
 		TERM_COLOR_WHITE, TERM_COLOR_BLACK }
@@ -405,7 +541,7 @@ draw_splash_pixel(int x, int y, uint16_t color) {
 			(color & 0x0f00) << 8 |
 			(color & 0xff);
 
-	buffer[y*SCREEN_WIDTH + x] = pixel;
+	buffer[y*TERM_WIDTH + x] = pixel;
 }
 
 /*
@@ -414,10 +550,10 @@ draw_splash_pixel(int x, int y, uint16_t color) {
 
 static void
 generate_splash(void) {
-	gfx_init(draw_splash_pixel, SCREEN_WIDTH, SCREEN_HEIGHT, GFX_FONT_LARGE);
+	gfx_init(draw_splash_pixel, TERM_WIDTH, TERM_HEIGHT, GFX_FONT_LARGE);
 
 	gfx_fillScreen((uint16_t) 0x0200 | ' ');
-	gfx_drawRoundRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 5, 0x0500 | '*');
+	gfx_drawRoundRect(0, 0, TERM_WIDTH, TERM_HEIGHT, 5, 0x0500 | '*');
 	gfx_setCursor(3, 12);
 	/* this text doesn't write the 'background' color */
 	gfx_setTextColor((uint16_t) 0x0200| '*', (uint16_t) 0x0200| ' ');
@@ -428,15 +564,15 @@ generate_splash(void) {
  * This code initializes various bits and throws up the
  * the splash screen on the LCD.
  */
-void
-splash_screen(void)
+uint32_t
+splash_screen(int opt)
 {
 	unsigned int i;
 	char	*msg;
 	int		row, col;
 
 	generate_splash();
-	current_fg_color = TERM_COLOR_GREEN;
+	current_fg_color = TERM_COLOR_BGREEN;
 	current_bg_color = TERM_COLOR_BLACK;
 	i = 0;
 	while (splash_messages[i].row > 0) {
@@ -444,21 +580,22 @@ splash_screen(void)
 		row = splash_messages[i].row;
 		col = splash_messages[i].col;
 		while (*msg) {
-			buffer[row * SCREEN_WIDTH + col] = (splash_messages[i].bg << 24) |
+			buffer[row * TERM_WIDTH + col] = (splash_messages[i].bg << 24) |
 												(splash_messages[i].fg << 16) | *msg;
 			msg++;
 			col++;
 		}
 		i++;
 	}
-	render_buffer(3);
-	move_cursor(CURSOR_HOME);
-	
+	cursor_move(CURSOR_HOME);
+	return render_buffer(opt);
 }
+
 int
 main(void) {
-	char	c;
-	pixel_target pt;
+	int	c;
+	uint32_t	bnch;
+	char	buf[81];
 #ifdef DUMP_GLYPH
 	int		row, col;
 	uint8_t	*gl;
@@ -466,22 +603,35 @@ main(void) {
 
 	rcc_periph_clock_enable(RCC_DMA2D);
 	printf("Terminal simulation.\n");
-	splash_screen();
+	bnch = splash_screen(0);
+	printf("Splash Screen renders in %d mS on option 0\n", (int) bnch);
+	bnch = splash_screen(1);
+	printf("Splash Screen renders in %d mS on option 1\n", (int) bnch);
 	printf("Please type characters :\n");
 	while (1) {
-		c = console_getc(1);
-		if (c == '\r') {
-			move_cursor(CURSOR_RETURN);
-			move_cursor(CURSOR_DOWN);
-		} else if (c == 0xc) {
-			clear_screen(0xff000000);
-			lcd_flip(0);
-			move_cursor(CURSOR_HOME);
-		} else {
-			get_glyph(&pt, c);
-			dma2d_char(c, current_fg_color, current_bg_color);
-			move_cursor(CURSOR_RIGHT);
-			lcd_flip(0);
+
+		if ((c = console_getc(0)) != 0) {
+			console_putc(c);
+			term_putc(c);
+			if (c == '\r') {
+				console_putc('\n');
+				term_putc('\n');
+			}
+			if (c == 0x19) {
+				for (c = 0; c < 256; c++) {
+					term_putc(c);
+					if (((c-1) % 32) == 0) {
+						term_putc('\r');
+						term_putc('\n');
+					}
+				}
+			}
+			if (c == 0x1a) {
+				for (c = 0; c < 30; c++) {
+					snprintf(buf, 81, "This is a test line # %d\n", c);
+					term_puts(buf);
+				}
+			}
 		}
 	}
 }

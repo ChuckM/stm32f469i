@@ -31,6 +31,12 @@
 /* Common function descriptions */
 #include "../util/clock.h"
 
+void term_draw_cursor(int);
+
+static void null_func(void) { };
+
+#pragma weak term_draw_cursor = null_func
+
 /* milliseconds since boot */
 static volatile uint32_t system_millis;
 /* millisecond count down when sleeping */
@@ -43,6 +49,7 @@ void sys_tick_handler(void)
 	if (system_delay != 0) {
 		system_delay--;
 	}
+	term_draw_cursor((system_millis & 0x200) != 0);
 }
 
 /* simple sleep for delay milliseconds */

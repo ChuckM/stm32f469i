@@ -11,6 +11,7 @@
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include <stdint.h>
 
 
 #define WIDTH   800
@@ -21,7 +22,116 @@
 #define CELL_HEIGHT	19
 #define CELL_BASELINE 5
 
+
+/*
+typedef struct __term_font {
+	int	w;
+	int	h;
+	uint32_t	glyphs[256];
+	uint8_t	*glyph_data;
+} TERM_FONT;
+
+TERM_FONT regular_font = {
+	CHAR_WIDTH,
+	CHAR_HEIGHT,
+	{ 
+		0x00
+	},
+	&__font_data[0][0][0]
+};
+*/
+	
 FILE	*font_src;
+uint32_t	font_offset;
+
+/*
+ * Generate an open box shape as the "null" glyph (when a
+ * character has no glyph, the terminal can print this box
+ * instead. And generate the 'space' glyph since space shows
+ * up as a zero width glyph in font files.
+ */
+void
+null_glyph(void)
+{
+	int row, col;
+	char gdata[CELL_WIDTH+1];
+	uint8_t b;
+
+	fprintf(font_src, "\t{ /* null glyph */\n");
+	for ( row = 0; row < CELL_HEIGHT; row++ )
+	{
+		printf("|");
+		fprintf(font_src, "\t\t{");
+		for ( col = 0; col < CELL_WIDTH; col++)
+	    {
+			b = 0;
+			if ((row == 1) || (row == ((CELL_HEIGHT - CELL_BASELINE) - 1))) {
+				if ((col > 0) && (col < (CELL_WIDTH - 1))) {
+					b = 0xff;
+				}
+			} else if ((row > 1) && (row < ((CELL_HEIGHT - CELL_BASELINE) - 1))) {
+				if ((col == 1) || (col == (CELL_WIDTH - 2))) {
+					b = 0xff;
+				} 
+			}
+
+			if (b < 64) {
+				putchar(' ');
+				gdata[col] = ' ';
+			} else if (b < 128) {
+				putchar('.');
+				gdata[col] = '.';
+			} else if (b < 192) {
+				putchar('*');
+				gdata[col] = '*';
+			} else {
+				putchar('@');
+				gdata[col] = '@';
+			}
+			if (col < (CELL_WIDTH-1)) {
+				fprintf(font_src, "0x%02x, ", b);
+			} else {
+				fprintf(font_src, "0x%02x", b);
+			}
+		}
+		gdata[CELL_WIDTH] = 0;
+		fprintf(font_src, "},\t/* %10s */\n", gdata);
+		printf("|\n");
+	}
+	fprintf(font_src, "\t},\n");
+	fprintf(font_src, "\t{ /* Space glyph */\n");
+	for ( row = 0; row < CELL_HEIGHT; row++ )
+	{
+		printf("|");
+		fprintf(font_src, "\t\t{");
+		for ( col = 0; col < CELL_WIDTH; col++)
+	    {
+			b = 0;
+			if (b < 64) {
+				putchar(' ');
+				gdata[col] = ' ';
+			} else if (b < 128) {
+				putchar('.');
+				gdata[col] = '.';
+			} else if (b < 192) {
+				putchar('*');
+				gdata[col] = '*';
+			} else {
+				putchar('@');
+				gdata[col] = '@';
+			}
+			if (col < (CELL_WIDTH-1)) {
+				fprintf(font_src, "0x%02x, ", b);
+			} else {
+				fprintf(font_src, "0x%02x", b);
+			}
+		}
+		gdata[CELL_WIDTH] = 0;
+		fprintf(font_src, "},\t/* %10s */\n", gdata);
+		printf("|\n");
+	}
+	fprintf(font_src, "\t},\n");
+}
 
 /*
  * Let's assume the font glyph is in a box that is 10 x 19 pixels
@@ -100,9 +210,7 @@ draw_bitmap( FT_Bitmap*  bitmap,
 		printf("-");
 	}
 	printf("+\n");
-	if ((this_glyph > 0x20) && (this_glyph < 127)) {
-		fprintf(font_src, "\t{ /* char '%c' */\n", this_glyph);
-	}
+	fprintf(font_src, "\t{ /* char '%c' */\n", this_glyph);
 	for ( row = 0; row < CELL_HEIGHT; row++ )
 	{
 		printf("|");
@@ -152,9 +260,6 @@ draw_bitmap( FT_Bitmap*  bitmap,
 	printf("+\n");
 }
 
-void FT_Outline_Get_BBox(FT_Outline *, FT_BBox *);
-
-
 int
 main( int     argc,
       char**  argv )
@@ -167,8 +272,10 @@ main( int     argc,
   FT_Vector     pen;                    /* untransformed origin  */
   FT_Error      error;
 
+	int	i, j;
   char*         filename;
 
+	int	offsets_table[256];		/* table of offsets */
   int           target_height;
   int           n;
 	int	max_width, max_height;
@@ -211,39 +318,90 @@ main( int     argc,
   pen.x = 20 * 64;
   pen.y = 40 * 64;
 
+/*
+typedef struct __term_font {
+	int	w;
+	int	h;
+	uint32_t	glyphs[256];
+	uint8_t	*glyph_data;
+} TERM_FONT;
+
+TERM_FONT regular_font = {
+	CHAR_WIDTH,
+	CHAR_HEIGHT,
+	{ 
+		0x00
+	},
+	&__font_data[0][0][0]
+};
+*/
 	font_src = fopen("font_src.c", "w");
 	fprintf(font_src, "#include <stdint.h>\n");
+	fprintf(font_src, "#include \"term.h\"\n");
 	fprintf(font_src, "/* Automatically generated font data using FreeType2 */\n");
-	fprintf(font_src, "#define CHAR_WIDTH	%d\n", CELL_WIDTH);
-	fprintf(font_src, "#define CHAR_HEIGHT	%d\n", CELL_HEIGHT);
-	fprintf(font_src, "uint8_t glyph_data[128][CHAR_HEIGHT][CHAR_WIDTH] = {\n");
+	fprintf(font_src, "/* generated from %s */\n", filename);
+
+	fprintf(font_src, "static const uint8_t __glyph_data[][CHAR_HEIGHT][CHAR_WIDTH] = {\n");
+	font_offset = 0;
+	null_glyph();	 /* non-glyph and 'space' glyph */
+	offsets_table[0] = 0;
+	font_offset += 2 * (CELL_WIDTH * CELL_HEIGHT);
 	
-  for ( n = 0; n < 256; n++ )
+  for ( n = 1; n < 256; n++ )
   {
-	FT_BBox	bb;
     /* generate glyphs for char value 0 through 255 */
     error = FT_Load_Char( face, n, FT_LOAD_RENDER );
-    if ( error )
+    if ( error ) {
+		offsets_table[n] = 0;
       continue;                 /* ignore errors */
+	}
 
+	/* track the size of the various glyphs */
 	if (slot->bitmap.width > max_width) {
 		max_width = slot->bitmap.width;
 	}
 	if (slot->bitmap.rows > max_height) {
 		max_height = slot->bitmap.rows;
 	}
-	FT_Outline_Get_BBox(&slot->outline, &bb);
 	printf("Character 0x%x [%d, %d]\n", n, slot->bitmap.width, slot->bitmap.rows);
     /* now, draw to our target surface (convert position) */
 	
-    draw_bitmap( &slot->bitmap,
+	/* special case ' ' character since it shows up as a null glyph */
+	if ((slot->bitmap.rows == 0) || (slot->bitmap.width == 0)) {
+		if ((char) n == ' ') {
+			printf("Space Character, width is %d, height is %d\n", 
+						slot->bitmap.width, slot->bitmap.rows);
+			offsets_table[n] = CELL_WIDTH * CELL_HEIGHT;
+		} else {
+			offsets_table[n] = 0;
+		}
+	} else {
+    	draw_bitmap( &slot->bitmap,
                  slot->bitmap_left,
                  slot->bitmap_top, (unsigned char) n );
-
+		offsets_table[n] = font_offset;
+		font_offset += CELL_WIDTH * CELL_HEIGHT;
+	}
   }
 
 	fprintf(font_src, "};\n");
+	fprintf(font_src, "\n");
+	fprintf(font_src, "TERM_FONT named_font = {\n");
+	fprintf(font_src, "\t%d,\t/* width */\n", CELL_WIDTH);
+	fprintf(font_src, "\t%d,\t/* height */\n", CELL_HEIGHT);
+	fprintf(font_src, "\t{\t/* offsets */\n");
+	for (i = 0; i < 256; i += 8) {
+		fprintf(font_src, "\t\t");
+		for (j = 0; j < 8; j++) {
+			fprintf(font_src, "%6d,", offsets_table[i+j]);
+		}
+		fprintf(font_src, "\n");
+	}
+	fprintf(font_src, "\t},\n");
+	fprintf(font_src, "\t&__glyph_data[0][0][0]\n");
+	fprintf(font_src, "};\n");
 	fclose(font_src);
+
   FT_Done_Face    ( face );
   FT_Done_FreeType( library );
 
