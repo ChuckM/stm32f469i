@@ -672,6 +672,13 @@ generate_digits(void)
  * the existing color. When drawing drop shadows we use an alpha
  * of 0x80 which makes the drop shadows 50% transparent.
  */
+#ifndef DMA2D_FG_CLUT
+#define DMA2D_FG_CLUT	(uint32_t *)(DMA2D_BASE + 0x0400UL)
+#endif
+#ifndef DMA2D_BG_CLUT
+#define DMA2D_BG_CLUT	(uint32_t *)(DMA2D_BASE + 0x0800UL)
+#endif
+
 void
 dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 {
@@ -698,7 +705,7 @@ dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 					DMA2D_SET(BGPFCCR, AM, 0);
 
 	/* output frame buffer is ARGB8888 */
-	DMA2D_OPFCCR = DMA2D_OPFCCR_CM_ARGB8888;
+	DMA2D_OPFCCR = 0; /* DMA2D_OPFCCR_CM_ARGB8888; */
 
 	/*
 	 * This sets the size of the "box" we're going to copy. For the
