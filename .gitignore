@@ -3,3 +3,5 @@ demos/term/font/makefont
 *.d
 *.o
 *.elf
+tags
+cscope.out
