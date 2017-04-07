@@ -1,3 +1,4 @@
+demos/term/font/makefont
 *.map
 *.d
 *.o

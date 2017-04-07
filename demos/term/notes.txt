@@ -1,0 +1,105 @@
+Terminal
+--------
+
+Ok, so I want an 80 x 25 terminal window. To do that we need a font
+it is in the file font-image.png
+
+That file should be 800 x 475 pixels (8 bit greyscale). Each character
+should be sitting in a 10 x 19 box. We pull out the boxes, we then
+generate C code to represent the glyphs.
+
+That is 19,000 bytes for 100 glyphs. (ASCII has, in theory, 96 printable
+characters). (Did I say it was i18n compatible? NO I did not.) 
+
+Its actually 801 by 476 (I generated it with CorelDraw, not sure why it
+is off by 1 pixel, progammers I guess)
+
+Blitter Operations
+------------------
+
+Fill	size, dst, value
+Copy	size, src, dst, src_fmt, dst_fmt
+Blend	size, src, dst, src_fmt, dst_fmt
+
+Given a set of know operations
+
+Scroll up:
+	Copy (all but 1 line), one line down, top, fb_fmt, fb_fmt)
+	Fill (1 line, bottom line, background)
+
+Character
+	Blend (one char, font, char_pos, font_fmt, fb_fmt)
+
+Delete Character
+	Copy (partial line, char_pos, one char_left, fb_fmt, fb_fmt)
+	Fill (1 char, right side, background)
+
+Insert Character
+	Copy (partial line, char_pos, one char_right, fb_fmt, fb_fmt)
+	Blend (one char, font, char_pos, font_fmt, fb_fmt)
+
+Insert Line, scroll above lines up, clear at current line.
+
+Insert Line
+
+Delete Line
+
+FG Color, BG Color (bold, normal ?) inverted.
+
+Filling the screen with characters in an 80 x 24 array is about 20mS. That
+is effectively 96,000 characters per second or 960K baud equivalent. So
+better than 115,200. That is worst case, scrolling and clearing should be
+able to do better.
+
+---------------------------
+Check point
+---------------------------
+
+Ok, I can generate a page of text, I can show it on the screen. I can track
+a cursor position, I cannot yet scroll the screen up, or down, or left, or
+right.
+
+So next up:
+	vertical scrolling.
+
+Also we might consider "bold" text in addition to "regular" text.
+
+********CHANGES IN PLAY ******************
+
+Converting dma2d_char is a "dumb" character blitting function screen_putc is the
+"smart" one which has all the defaults.
+
+A simple "font" structure with the size of the glyphs, a bitmap for which glyphs are
+valid, and a pointer to the glyph data.
+
+Need to update makefont - generate font with the structure on top
+get_glyph has to compute address of the glyph from the bitmap. Return non_char if it
+doesn't have a glyph (a square box) (always glyph 0 of the font data?)
+
+Cursor position is a custom structure.
+
+----- Updates:
+
+Makefont is now updated, it generates a font in the new 'style' and the new style
+is a pretty good style. I've generated a bold and regular Inconsolata glyph set
+so that the terminal can display bold text. It also has some symbols,
+
+DMA2D_Char is now the "dumb" version, screen_putc (should be term_putc) is the "smart"
+version (uses built in defaults) the putc function will implement inline functions
+like changing colors, modes, etc.
+
+Doesn't implement wide chars or 132column mode. That would take a 6 x 8 font? Aka
+the small font in my graphics library.
+
+-------------------
+Separating policy from action.
+
+consider that term_getc/term_putc have no editorial opinion, they just pass what
+they get through.
+term_gets/term_puts impose an editorial opinion and they allow things to be "interpreted"
+in the input/output.
+
+Exact analogs to console_gets/console_puts/console_getc/console_putc
+Defining the "standard" terminal for interpretation with color changes and cursor position
+
+
