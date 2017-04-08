@@ -4,7 +4,7 @@
  */
 #ifndef __UTIL_H
 #define __UTIL_H
-
+#include <gfx.h>
 /*
  * Definitions for clock functions
  */
@@ -75,11 +75,25 @@ void qspi_unmap_flash(void);
  * LCD function (if you've included lcd.o)
  */
 
+#if 0
+#ifndef GFX_COLOR
+typedef union __gfx_color {
+	struct {
+		uint32_t	b:8;
+		uint32_t	g:8;
+		uint32_t	r:8;
+		uint32_t	a:8;
+	} c;
+	uint32_t	raw;
+} GFX_COLOR;
+#endif
+#endif
+
 /* #define FRAMEBUFFER_ADDRESS (0xc0000000U - (800U * 480U * 4U)) */
 #define FRAMEBUFFER_ADDRESS (0xc1000000U - 0x200000U)
 void lcd_init(void);
 void lcd_clear(uint32_t color);
 void lcd_flip(int te_locked);
-void lcd_draw_pixel(int x, int y, uint16_t color);
+void lcd_draw_pixel(int x, int y, GFX_COLOR color);
 
 #endif /* generic header protector */
