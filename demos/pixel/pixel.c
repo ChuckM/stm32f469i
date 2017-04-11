@@ -3,53 +3,39 @@
 #include <gfx.h>
 #include "../util/util.h"
 
-#ifdef old_style
-typedef union __dma2d_pixel {
+/* Mapping for the OCOLR register */
+typedef union __dma2d_color {
     struct {
-        uint8_t    b:5;
-        uint8_t    g:6;
-        uint8_t    r:5;
+        uint32_t    b:5;
+        uint32_t    g:6;
+        uint32_t    r:5;
     } rgb565;
     struct {
-        uint8_t b:8;
-        uint8_t g:8;
-        uint8_t r:8;
-        uint8_t a:8;
+        uint32_t b:8;
+        uint32_t g:8;
+        uint32_t r:8;
+        uint32_t a:8;
     } argb8888;
     struct {
-        uint8_t b:8;
-        uint8_t g:8;
-        uint8_t r:8;
+        uint32_t b:8;
+        uint32_t g:8;
+        uint32_t r:8;
     } rgb888;
     struct {
-        uint8_t    b:5;
-        uint8_t    g:5;
-        uint8_t    r:5;
-        uint8_t    a:1;
+        uint32_t    b:5;
+        uint32_t    g:5;
+        uint32_t    r:5;
+        uint32_t    a:1;
     } argb1555;
     struct {
-        uint8_t    b:4;
-        uint8_t    g:4;
-        uint8_t    r:4;
-        uint8_t    a:4;
+        uint32_t    b:4;
+        uint32_t    g:4;
+        uint32_t    r:4;
+        uint32_t    a:4;
     } argb4444;
-    struct {
-        uint8_t    l:8;
-        uint8_t    a:8;
-    } al88;
-    struct {
-        uint8_t    l:4;
-        uint8_t    a:4;
-    } al44;
-    struct {
-        uint8_t    a:8;
-    } a8;
-    struct {
-        uint8_t    l:8;
-    } l8;
-    uint32_t raw;
-} pixel_t;
-#else 
+    uint32_t	raw;
+} DMA2D_COLOR;
+
 /* 8 bit pixel definitions */
 typedef union __dma2d_pixel_8 {
     struct {
@@ -122,7 +108,6 @@ typedef union __dma2d_pixel {
 	pixel32_t	p32;
 	// uint32_t	raw;
 } pixel_t;
-#endif
 
 void print_pixel(pixel_t p);
 
@@ -185,15 +170,38 @@ main(void)
 {
 	/* a bit of memory to put pixels into */
 	pixel_t pix[16];
+	DMA2D_COLOR	clr;
 	int	i;
+	int	r,g,b,a;
 
+	r = 0x40;
+	g = 0x30;
+	b = 0x20;
+	a = 0x10;
 
 	printf("Pixel experiments\n");
 	printf("Pixel structure size is %d bytes\n", sizeof(pixel_t));
 	printf("   Pixel8 structure size is %d bytes\n", sizeof(pixel8_t));
 	printf("   Pixel16 structure size is %d bytes\n", sizeof(pixel16_t));
 	printf("   Pixel32 structure size is %d bytes\n", sizeof(pixel32_t));
-
+	printf("Color structure size is %d bytes\n", sizeof(DMA2D_COLOR));
+	clr.raw = 0;
+	clr = (DMA2D_COLOR) { .argb8888={ 0x1, 0x2, 0x3, 0x4}};
+	printf("  Color ARGB8888 (0x4030201 ?) : 0x%0x\n", (unsigned int) clr.raw);
+//	clr.raw = 0;
+	clr.raw = ((DMA2D_COLOR) { .rgb888={ 0x1, 0x2, 0x3}}).raw;
+	printf("  Color RGB8888 (0x30201 ?) : 0x%0x\n", (unsigned int) clr.raw);
+//	clr.raw = 0;
+	clr.raw = ((DMA2D_COLOR) { .rgb565={ 0x1, 0x2, 0x3}}).raw;
+	printf("  Color RGB565 (?) : 0x%0x\n", (unsigned int) clr.raw);
+//	clr.raw = 0;
+	clr.raw = ((DMA2D_COLOR) { .argb1555={ 0x3, 0x4, 0x5, 0x1}}).raw;
+	printf("  Color RGB565 (?) : 0x%0x\n", (unsigned int) clr.raw);
+//	clr.raw = 0;
+	clr.raw = ((DMA2D_COLOR) { .argb4444={ 0x1, 0x2, 0x3, 0x4}}).raw;
+	printf("  Color ARG4444 (0x4321) : 0x%0x\n", (unsigned int) clr.raw);
+	clr.raw = ((DMA2D_COLOR) { .argb8888={ r, g, b, a}}).raw;
+	printf("  Color (var test) (0x4321) : 0x%0x\n", (unsigned int) clr.raw);
 	for (i = 0; i < 16; i++) {
 		pix[i].p32.argb8888.a = 'A';
 		pix[i].p32.argb8888.r = 'R';

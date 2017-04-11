@@ -77,6 +77,24 @@ static const char *hz[] = {
 	"26"
 };
 
+#define RET_WIDTH	700
+#define RET_HEIGHT	450
+#define RET_BPP		4
+uint8_t	__reticule_fb[(RET_WIDTH * RET_HEIGHT) / 2];
+
+static void
+draw_pixel_l4(void *buf, int x, int y, GFX_COLOR c)
+{
+	uint8_t	*fb = (((uint8_t *)(buf)) + (y * (RET_WIDTH / 2)) + (x / 2));
+
+	/* check this what order do the pixels go in? */
+	if ((x & 1) == 0) {
+		*fb = (*fb & 0xf0) | (c.p.g & 0xf);
+	} else {
+		*fb = (*fb & 0xf) | ((c.p.g & 0xf) << 4);
+	}
+}
+
 void create_reticule(int x, int y, GFX_COLOR c) {
 	int i, k;
 
