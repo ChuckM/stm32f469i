@@ -515,10 +515,10 @@ lcd_flip(int te_lock)
  *  to the simple graphics library.
  */
 void
-lcd_draw_pixel(int x, int y, GFX_COLOR color)
+lcd_draw_pixel(void * buf, int x, int y, GFX_COLOR color)
 {
 	uint32_t dx, dy;
-	uint32_t *ptr = (uint32_t *)(FRAMEBUFFER_ADDRESS);
+	uint32_t *ptr = (uint32_t *)buf;
 	uint32_t pixel;
 
 

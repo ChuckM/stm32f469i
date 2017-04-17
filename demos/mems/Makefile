@@ -1,7 +1,7 @@
 #
 #
 
-OBJS = ../util/lcd.o ../util/hexdump.o ../util/console.o ../util/clock.o ../util/sdram.o ../util/retarget.o
+OBJS = dma2d.o ../util/lcd.o ../util/hexdump.o ../util/console.o ../util/clock.o ../util/sdram.o ../util/retarget.o
 
 BINARY = mems
 

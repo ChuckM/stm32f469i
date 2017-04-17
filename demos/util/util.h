@@ -94,6 +94,6 @@ typedef union __gfx_color {
 void lcd_init(void);
 void lcd_clear(uint32_t color);
 void lcd_flip(int te_locked);
-void lcd_draw_pixel(int x, int y, GFX_COLOR color);
+void lcd_draw_pixel(void *buf, int x, int y, GFX_COLOR color);
 
 #endif /* generic header protector */

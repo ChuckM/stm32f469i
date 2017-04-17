@@ -49,6 +49,19 @@ typedef union __dma2d_color {
 		uint32_t	r:4;
 		uint32_t	a:4;
 	} argb4444;
+	struct {
+		uint32_t	l:8;
+	} l8;
+	struct {
+		uint32_t	l:4;
+	} l4;
+	/* not sure these are useful ... */
+	struct {
+		uint32_t	a:8;
+	} a8;
+	struct {
+		uint32_t	a:4;
+	} a4;
 	uint32_t	raw;
 } DMA2D_COLOR;
 
@@ -66,7 +79,20 @@ type struct __dma2d_bitmap  {
 	int		mode;	/* This is the bitmap 'mode' */
 	int		w, h;	/* width and height */
 	int		stride;	/* distance between 'lines' in the bitmap */
-	DMA2D_COLOR	c;	/* Default color on A4/A8 bitmaps */
+	DMA2D_COLOR	fg, bg;	/* Default colors on A4/A8 bitmaps */
+/* should this be a DMA2D_COLOR pointer ? */
 	uint32_t	*clut;	/* the color lookup table */
 } DMA2D_BITMAP;
+
+void dma2d_clear(DMA2D_BITMAP *bm, DMA2D_COLOR color);
+void dma2d_render(DMA2D_BITMAP *bm, int x, int y);
+/*
+ * render 4 bit, 8 bit, 16 bit, 24 bit, or 32 bit pixels into a
+ * buffer. The lower bits are used in the passed in value.
+ */
+void dma2d_draw_4bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel);
+void dma2d_draw_8bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel);
+void dma2d_draw_16bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel);
+void dma2d_draw_24bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel);
+void dma2d_draw_32bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel);
 

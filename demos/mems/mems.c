@@ -15,6 +15,7 @@
 #include <gfx.h>
 
 #include "../util/util.h"
+#include "dma2d.h"
 
 /*
  * MEMS Setup
@@ -45,10 +46,6 @@ uint8_t reticule[700 * 450];
 #define DARK_GRID	COLOR(0xc0, 0xc0, 0xe0)	/* dark blue */
 
 void create_reticule(int x, int y, GFX_COLOR c);
-#define TOP_MARGIN	12
-#define LEFT_MARGIN	35	
-#define RET_WIDTH	700
-#define RET_HEIGHT	400
 
 static const char *dbm[] = {
 	"   0",
@@ -77,6 +74,8 @@ static const char *hz[] = {
 	"26"
 };
 
+#define TOP_MARGIN	12
+#define LEFT_MARGIN	35	
 #define RET_WIDTH	700
 #define RET_HEIGHT	450
 #define RET_BPP		4
@@ -95,19 +94,21 @@ draw_pixel_l4(void *buf, int x, int y, GFX_COLOR c)
 	}
 }
 
-void create_reticule(int x, int y, GFX_COLOR c) {
-	int i, k;
-
 /*
-	clear_screen();
-	reticule.width = 700;
-	reticule.height = 450;
-	reticule.fmt = L4;
-	reticule.stride = 700;
-	reticule.bpp = 8;
-	fb = &reticule;
-	gfx_init(write_pixel, reticule.width, reticule.height, GFX_FONT_LARGE);
-*/
+ * Build a reticule in a 4bpp buffer.
+ */
+DMA2D_BITMAP *
+create_reticule(int x, int y, GFX_COLOR c)
+{
+	int i, k;
+	DMA2D_BITMAP *res;
+	res = malloc(sizeof(DMA2D_BITMAP) + (RET_HEIGHT * (RET_WIDTH / 2)));
+	res->fb = (uint8_t *)(res + 1);
+	res->stride = RET_WIDTH/2;
+	dma2d_clear(res, 0x0);
+
+	/* TODO: how much easier for this to generate a gfx_context * ? */
+	gfx_init(dma2d_4bpp_write, RET_WIDTH, RET_HEIGHT, GFX_FONT_LARGE, (void *)res);
 
 	gfx_drawRoundRect(x, y+TOP_MARGIN, RET_WIDTH, RET_HEIGHT, 10, WHITE);
 	gfx_setTextSize(1);
@@ -257,7 +258,7 @@ generate_background(void)
 	int i, x, y;
 	uint32_t *t;
 
-	gfx_init(bg_draw_pixel, 800, 480, GFX_FONT_LARGE);
+	gfx_init(bg_draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)(BACKGROUND_FB));
 	for (i = 0, t = (uint32_t *)(BACKGROUND_FB); i < 800 * 480; i++, t++) {
 		*t = 0xffffffff; /* clear to white */
 	}
@@ -335,7 +336,7 @@ main(void) {
 	rcc_periph_clock_enable(RCC_DMA2D);
 	fprintf(stderr, "MEMS Microphone Demo program\n");
 
-	gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE);
+	gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAME_BUFFER);
 	dma2d_fill(0x0);
 	create_reticule(50, 25, LIGHT_GRID);
 	x0 = 51;
