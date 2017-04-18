@@ -122,7 +122,7 @@ dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y)
 	 * DMA to load the color table. Instead doing it
 	 * manually if required.
 	 */
-	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_M2M);
+	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_M2MWB);
 
 	/* pixel data */
 	DMA2D_FGMAR = (uint32_t) src->buf;
