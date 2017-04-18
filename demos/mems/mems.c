@@ -146,6 +146,11 @@ create_reticule(void)
 	margin_bottom = 2 * margin_top;
 	box_width = RET_WIDTH - (margin_top + margin_left);
 	box_height = RET_HEIGHT - (margin_top + margin_bottom);
+	reticule.b_w = box_width;
+	reticule.b_h = box_height;
+	reticule.o_x = margin_left;
+	reticule.o_y = margin_top;
+
 	gfx_move_to(g, margin_left, margin_top);
 	gfx_fill_rounded_rectangle(g, box_width, box_height, 10, RCOLOR(1));
 	gfx_draw_rounded_rectangle(g, box_width, box_height, 10, RCOLOR(2));
@@ -160,7 +165,7 @@ create_reticule(void)
 			if (((k % 50) == 0) && (i == 50)) {
 				if ((k / 50) < 9) {
 					t = gfx_get_string_width(g, (char *) dbm[(k/50)-1]);
-					gfx_set_text_cursor(g, margin_left - (t + 1),
+					gfx_set_text_cursor(g, margin_left - (t + 2),
 							margin_top + k + gfx_get_text_baseline(g)/2);
 					gfx_puts(g, (char *) dbm[(k/50)-1]);
 				}
@@ -213,13 +218,14 @@ main(void) {
 	g = gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAMEBUFFER_ADDRESS);
 	dma2d_clear(&screen, DMA2D_GREY);
 	(void) create_reticule();
-	x0 = 51;
-	y0 = 25 + RET_HEIGHT/2;
-	y2 = 25 + RET_HEIGHT/2;
-	for (i = 0; i < 699; i++) {
-		y1 =  (int) (100 * sin((float) i * M_PI / 100.0)) + 25 + RET_HEIGHT/2;
-		y3 =  (int) (100 * cos((float) i * M_PI / 100.0)) + 25 + RET_HEIGHT/2;
-		x1 = i + 51;
+	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
+	x0 = reticule.o_x;
+	y0 = reticule.o_y + reticule.b_h / 2;
+	y2 = reticule.o_y + reticule.b_h / 2 + 100;
+	for (i = 0; i < reticule.b_w; i++) {
+		y1 =  (int) (100 * sin((float) i * M_PI / 100.0)) + 25 + reticule.b_h/2;
+		y3 =  (int) (100 * cos((float) i * M_PI / 100.0)) + 25 + reticule.b_h/2;
+		x1 = i + reticule.o_x;
 		gfx_move_to(g, x0, y0);
 		gfx_draw_line(g, (x1 - x0), (y1 - y0), GFX_COLOR_YELLOW);
 		gfx_move_to(g, x0, y2);
@@ -228,7 +234,6 @@ main(void) {
 		y0 = y1;
 		y2 = y3;
 	}
-	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
 	lcd_flip(0);
 	while (1) {
 	}
