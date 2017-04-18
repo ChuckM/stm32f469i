@@ -65,6 +65,25 @@ typedef union __dma2d_color {
 	uint32_t	raw;
 } DMA2D_COLOR;
 
+#define DMA2D_ARGB8888	0
+#define DMA2D_RGB888	1
+#define DMA2D_RGB565	2
+#define DMA2D_ARGB1555	3
+#define DMA2D_ARGB4444	4
+#define DMA2D_L8	5
+#define DMA2D_AL44	6
+#define DMA2D_AL88	7
+#define DMA2D_L4	8
+#define DMA2D_A8	9
+#define DMA2D_A4	10
+
+#ifndef DMA2D_FG_CLUT
+#define DMA2D_FG_CLUT	(uint32_t *)(DMA2D_BASE + 0x0400UL)
+#endif
+#ifndef DMA2D_BG_CLUT
+#define DMA2D_BG_CLUT	(uint32_t *)(DMA2D_BASE + 0x0800UL)
+#endif
+
 /*
  * This is a 'blittable' bitmap. The important bits to
  * get right are the stride and the bits per pixel. Also
@@ -74,18 +93,19 @@ typedef union __dma2d_color {
  * that represents transparency (typically 0) has ALPHA
  * set to 0.
  */
-type struct __dma2d_bitmap  {
+typedef struct __dma2d_bitmap  {
 	void		*buf;	/* this is where the pixel data is */
 	int		mode;	/* This is the bitmap 'mode' */
 	int		w, h;	/* width and height */
 	int		stride;	/* distance between 'lines' in the bitmap */
 	DMA2D_COLOR	fg, bg;	/* Default colors on A4/A8 bitmaps */
 /* should this be a DMA2D_COLOR pointer ? */
+	int		maxc;	/* Maximum size of the CLUT table */
 	uint32_t	*clut;	/* the color lookup table */
 } DMA2D_BITMAP;
 
 void dma2d_clear(DMA2D_BITMAP *bm, DMA2D_COLOR color);
-void dma2d_render(DMA2D_BITMAP *bm, int x, int y);
+void dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y);
 /*
  * render 4 bit, 8 bit, 16 bit, 24 bit, or 32 bit pixels into a
  * buffer. The lower bits are used in the passed in value.

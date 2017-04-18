@@ -22,30 +22,43 @@
  * -------------------------------------------------------
  */
 
-#define SHADOW 0x80000000
-#define DMA2D_RED	0xffff0000
-#define DMA2D_BLACK	0xff000000
+#define DMA2D_SHADOW	(DMA2D_COLOR){.raw=0x80000000}
+#define DMA2D_RED	(DMA2D_COLOR){ .raw=0xffff0000}
+#define DMA2D_BLACK	(DMA2D_COLOR){.raw=0xff000000}
+#define DMA2D_WHITE	(DMA2D_COLOR){.raw=0xffffffff}
+#define DMA2D_GREY	(DMA2D_COLOR){.raw=0xff555555}
 
 /* another frame buffer 2MB "before" the standard one */
 #define BACKGROUND_FB (FRAMEBUFFER_ADDRESS - 0x200000U)
 #define MAX_OPTS	6
 
-void dma2d_bgfill(void);
-void dma2d_fill(uint32_t color);
+GFX_COLOR ret_colors[] = {
+	GFX_COLOR_BLACK, 	/* 0 = BLACK */
+	GFX_COLOR_WHITE,	/* 1 = WHITE */
+	GFX_COLOR_LTGREY,	/* 2 = GREY */
+	GFX_COLOR_CYAN,		/* 3 = CYAN */
+	GFX_COLOR_YELLOW,	/* 4 = YELLOW */
+	GFX_COLOR_MAGENTA,	/* 5 = MAGENTA */
+	GFX_COLOR_DKBLUE,	/* 6 = Dark blue (dark grid) */
+	GFX_COLOR_BLUE 		/* 7 = Blue (light grid) */
+};
 
-uint8_t reticule[700 * 450];
+#define RET_GRID	COLOR(0, 1, 0)
+#define LIGHT_GRID	COLOR(0, 7, 0)
+#define DARK_GRID	COLOR(0, 6, 0)
 
-#define WHITE	COLOR(0xff, 0xff, 0xff)
-#define GREY	COLOR(0x80, 0x80, 0x80)
-#define BLACK	COLOR(0x0, 0x0, 0x0)
-#define CYAN	COLOR(0x0, 0xff, 0xff)
-#define YELLOW	COLOR(0xff, 0xff, 0x00)
-#define MAGENTA	COLOR(0xff, 0x00, 0xff)
-#define GRID_BG		COLOR(0xff, 0xff, 0xff)	/* white */
-#define LIGHT_GRID	COLOR(0xc0, 0xc0, 0xff)	/* light blue */
-#define DARK_GRID	COLOR(0xc0, 0xc0, 0xe0)	/* dark blue */
+DMA2D_BITMAP *create_reticule(void);
 
-void create_reticule(int x, int y, GFX_COLOR c);
+DMA2D_BITMAP screen = {
+	.buf = (void *)(FRAMEBUFFER_ADDRESS),
+	.mode = DMA2D_ARGB8888,
+	.w = 800,
+	.h = 480,
+	.stride = 800 * 4,
+	.fg = DMA2D_WHITE,
+	.bg = DMA2D_BLACK,
+	.clut = NULL
+};
 
 static const char *dbm[] = {
 	"   0",
@@ -74,271 +87,130 @@ static const char *hz[] = {
 	"26"
 };
 
+#define RCOLOR(c)	(GFX_COLOR){.raw=(uint32_t) c}
 #define TOP_MARGIN	12
 #define LEFT_MARGIN	35	
 #define RET_WIDTH	700
 #define RET_HEIGHT	450
 #define RET_BPP		4
-uint8_t	__reticule_fb[(RET_WIDTH * RET_HEIGHT) / 2];
+static uint8_t	__reticule_fb[(RET_WIDTH * RET_HEIGHT) / 2];
+struct {
+	DMA2D_BITMAP	bm;
+	int o_x, o_y;	/* offset x and y into the box */
+	int b_w, b_h;	/* box width, box height */
+} reticule;
 
+/*
+ * This is a 'trampoline' function between the GFX
+ * libary's generalized notion of displays and the
+ * DMA2D devices understanding of bitmaps.
+ */
 static void
-draw_pixel_l4(void *buf, int x, int y, GFX_COLOR c)
+reticule_pixel(void *buf, int x, int y, GFX_COLOR c)
 {
-	uint8_t	*fb = (((uint8_t *)(buf)) + (y * (RET_WIDTH / 2)) + (x / 2));
-
-	/* check this what order do the pixels go in? */
-	if ((x & 1) == 0) {
-		*fb = (*fb & 0xf0) | (c.p.g & 0xf);
-	} else {
-		*fb = (*fb & 0xf) | ((c.p.g & 0xf) << 4);
-	}
+	/* use the green component as the 'color' */
+	dma2d_draw_4bpp(buf, x, y, (uint32_t)(c.raw) & 0xff);
 }
 
 /*
  * Build a reticule in a 4bpp buffer.
  */
 DMA2D_BITMAP *
-create_reticule(int x, int y, GFX_COLOR c)
+create_reticule(void)
 {
-	int i, k;
-	DMA2D_BITMAP *res;
-	res = malloc(sizeof(DMA2D_BITMAP) + (RET_HEIGHT * (RET_WIDTH / 2)));
-	res->fb = (uint8_t *)(res + 1);
-	res->stride = RET_WIDTH/2;
-	dma2d_clear(res, 0x0);
+	int i, k, t;
+	int margin_top, margin_bottom, margin_left;
+	int box_width, box_height;
+	GFX_CTX *g;
 
-	/* TODO: how much easier for this to generate a gfx_context * ? */
-	gfx_init(dma2d_4bpp_write, RET_WIDTH, RET_HEIGHT, GFX_FONT_LARGE, (void *)res);
+	/* half the bytes (4 bit pixels) */
+	reticule.bm.buf = __reticule_fb;
+	reticule.bm.mode = DMA2D_L4;
+	reticule.bm.stride = RET_WIDTH/2;
+	reticule.bm.w = RET_WIDTH;
+	reticule.bm.h = RET_HEIGHT;
+	reticule.bm.maxc = 3;
+	reticule.bm.clut = (uint32_t *)ret_colors;
+	dma2d_clear((DMA2D_BITMAP *)&reticule, DMA2D_GREY);
 
-	gfx_drawRoundRect(x, y+TOP_MARGIN, RET_WIDTH, RET_HEIGHT, 10, WHITE);
-	gfx_setTextSize(1);
-	gfx_setCursor(x+(RET_WIDTH/2) - 50, y);
-	gfx_setTextColor(WHITE, BLACK);
-	gfx_puts((unsigned char *) "Power Spectrum FFT");
-	y += TOP_MARGIN; /* margin */
-	gfx_fillTriangle(x+0,y+0, x+20, y+0, x+0, y+20, c);
-	for (k = 30; k < RET_HEIGHT; k++) {
-		for (i = 50; i < RET_WIDTH; i ++) {
+	g = gfx_init(reticule_pixel, RET_WIDTH, RET_HEIGHT, GFX_FONT_LARGE, 
+								(void *)&reticule);
+	margin_top = gfx_get_text_height(g) + 1;
+	margin_left = gfx_get_string_width(g, "-120") + margin_top;
+	margin_bottom = 2 * margin_top;
+	box_width = RET_WIDTH - (margin_top + margin_left);
+	box_height = RET_HEIGHT - (margin_top + margin_bottom);
+	gfx_move_to(g, margin_left, margin_top);
+	gfx_draw_rounded_rectangle(g, box_width, box_height, 10, RCOLOR(1));
+	/* Text will be 'White'(color index 1)  */
+	gfx_set_text_color(g, RCOLOR(1), RCOLOR(1));
+	i = gfx_get_string_width(g, "Power Spectrum FFT") / 2;
+	gfx_set_text_cursor(g, margin_left + (box_width - i), gfx_get_text_baseline(g));
+	gfx_puts(g, "Power Spectrum FFT");
+
+	for (k = 30; k < box_height; k++) {
+		for (i = 50; i < box_width; i ++) {
 			if ((k % 50) == 0) {
-				gfx_drawLine(x, y+k, x+RET_WIDTH, y+k, GREY);
-				gfx_drawLine(x+RET_WIDTH-15, y+k, x+RET_WIDTH, y+k, WHITE);
-				gfx_drawLine(x, y+k, x+15, y+k, WHITE);
+				gfx_move_to(g, margin_left, margin_top + k);
+				gfx_draw_line(g, 15, 0, RCOLOR(1));
+				gfx_draw_line(g, box_width - 30, 0, RCOLOR(2));
+				gfx_draw_line(g, 15, 0, RCOLOR(1));
 			}
 			if ((i % 50) == 0) {
 				/* should use a "+" here? */
-				gfx_drawLine(x+i, y, x+i, y+RET_HEIGHT-1, GREY);
-				gfx_drawLine(x+i, y, x+i, y+15, WHITE);
-				gfx_drawLine(x+i, y+RET_HEIGHT-15, x+i, y+RET_HEIGHT-1, WHITE);
+				gfx_move_to(g, margin_left + i, margin_top);
+				gfx_draw_line(g, 0, 15, RCOLOR(1));
+				gfx_draw_line(g, box_height - 30, 0, RCOLOR(2));
+				gfx_draw_line(g, 0, 15, RCOLOR(1));
 			} 
 		}
 	}
-	for (i = 30; i < RET_HEIGHT; i += 50) {
-		gfx_setCursor(x - LEFT_MARGIN, i+y+30-6);
+	for (i = 30; i < box_height; i += 50) {
 		if ((i/50) < 7) {
-			gfx_puts((unsigned char *)dbm[i/50]);
+			t = gfx_get_string_width(g, (char *) dbm[i/50]);
+			gfx_set_text_cursor(g, margin_left - (t + 1),
+					margin_top + i +
+				gfx_get_text_baseline(g) / 2);
+			gfx_puts(g, (char *) dbm[i/50]);
 		}
 	}
-	for (i = 0; i < RET_WIDTH; i += 50) {
-		gfx_setCursor(x + i  - 8 , y + RET_HEIGHT + 14);
+	for (i = 0; i < box_width; i += 50) {
 		if ((i/50) < 14) {
-			gfx_puts((unsigned char *)hz[i/50]);
+			t = gfx_get_string_width(g, (char *) hz[i/50]);
+			gfx_set_text_cursor(g, i + margin_left - t/2,
+				       margin_top + box_height + gfx_get_text_baseline(g));
+			gfx_puts(g, (char *)hz[i/50]);
 		}
 	}
-
+	t = gfx_get_string_width(g, "FREQUENCY (kHz)");
+	gfx_set_text_cursor(g, margin_left + box_width/2 - t/2,
+		margin_top + box_height + gfx_get_text_height(g) + gfx_get_text_baseline(g));
+	gfx_puts(g, "FREQUENCY (kHz)");
+	gfx_set_text_rotation(g, -90);
+	t = gfx_get_string_width(g, "POWER (dBm)");
+	gfx_set_text_cursor(g, gfx_get_text_baseline(g), 
+				margin_top + box_height / 2 + t / 2);
+	gfx_puts(g, "POWER (dBm)");
+	return (DMA2D_BITMAP *)&reticule;
 }
 
 /*
- * The DMA2D device can copy memory to memory, so in this case
- * we have another frame buffer with just the background in it.
- * And that is copied from there to the main display. It happens
- * faster than the tight loop fill but slightly slower than the
- * register to memory fill.
- */
-void
-dma2d_bgfill(void)
-{
-#ifdef MEMORY_BENCHMARK
-	uint32_t t1, t0;
-#endif
-
-	if (DMA2D_ISR & DMA2D_ISR_CEIF) {
-		DMA2D_IFCR |= 0x3F;
-		if (DMA2D_ISR & DMA2D_ISR_CEIF) {
-			printf("Failed to clear configuration error\n");
-			while (1);
-		}
-	}
-
-#ifdef MEMORY_BENCHMARK
-	t0 = mtime();
-#endif
-	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_M2M);
-	/* no change in alpha, same color mode, no CLUT */
-	DMA2D_FGPFCCR = 0x0;
-	DMA2D_FGMAR = (uint32_t) BACKGROUND_FB;
-	DMA2D_FGOR = 0; /* full screen */
-	DMA2D_OOR =	0;
-	DMA2D_NLR = DMA2D_SET(NLR, PL, 800) | 480; /* 480 lines */
-	DMA2D_OMAR = (uint32_t) FRAMEBUFFER_ADDRESS;
-
-	/* kick it off */
-	DMA2D_CR |= DMA2D_CR_START;
-	while ((DMA2D_CR & DMA2D_CR_START));
-	if (DMA2D_ISR & DMA2D_ISR_CEIF) {
-		printf("Configuration error!\n");
-		while (1);
-	}
-#ifdef MEMORY_BENCHMARK
-	t1 = mtime();
-	printf("Transfer rate (M2M) %6.2f MB/sec\n", 1464.84 / (float) (t1 - t0));
-#endif
-}
-
-/*
- * Use the DMA2D peripheral in register to memory
- * mode to clear the frame buffer to a single
- * color.
- */
-void
-dma2d_fill(uint32_t color)
-{
-#ifdef MEMORY_BENCHMARK
-	uint32_t t1, t0;
-
-	t0 = mtime();
-#endif
-	DMA2D_IFCR |= 0x3F;
-	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_R2M);
-	DMA2D_OPFCCR = 0x0; /* ARGB8888 pixels */
-	/* force it to have full alpha */
-	DMA2D_OCOLR = 0xff000000 | color;
-	DMA2D_OOR =	0;
-	DMA2D_NLR = DMA2D_SET(NLR, PL, 800) | 480; /* 480 lines */
-	DMA2D_OMAR = (uint32_t) FRAMEBUFFER_ADDRESS;
-
-	/* kick it off */
-	DMA2D_CR |= DMA2D_CR_START;
-	while (DMA2D_CR & DMA2D_CR_START);
-#ifdef MEMORY_BENCHMARK
-	t1 = mtime();
-	printf("Transfer rate (R2M) %6.2f MB/sec\n", 1464.84 / (float) (t1 - t0));
-#endif
-}
-
-/*
- * This set of utility functions are used once to
- * render our "background" into memory. Later we
- * will use the dma2d_bgfill to copy it into the
- * main display to "reset" the display to its non-drawn on
- * state.
- *
- * The background is a set up to look like quadrille
- * graph paper with darker lines every 5 lines.
- */
-
-void bg_draw_pixel(int, int, GFX_COLOR);
-
-/* Our own pixel writer for the background stuff */
-void
-bg_draw_pixel(int x, int y, GFX_COLOR color)
-{
-	uint32_t *fb = (uint32_t *) BACKGROUND_FB;
-	*(fb + (y * 800) + x) = color.raw;
-}
-
-void generate_background(void);
-
-/*
- * This generates a "pleasant" background which looks a bit
- * like graph paper.
- */
-void
-generate_background(void)
-{
-	int i, x, y;
-	uint32_t *t;
-
-	gfx_init(bg_draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)(BACKGROUND_FB));
-	for (i = 0, t = (uint32_t *)(BACKGROUND_FB); i < 800 * 480; i++, t++) {
-		*t = 0xffffffff; /* clear to white */
-	}
-	/* draw a grid */
-	t = (uint32_t *) BACKGROUND_FB;
-	for (y = 1; y < 480; y++) {
-		for (x = 1; x < 800; x++) {
-			/* major grid line */
-			if ((x % 50) == 0) {
-				gfx_drawPixel(x-1, y, DARK_GRID);
-				gfx_drawPixel(x, y, DARK_GRID);
-				gfx_drawPixel(x+1, y, DARK_GRID);
-			} else if ((y % 50) == 0) {
-				gfx_drawPixel(x, y-1, DARK_GRID);
-				gfx_drawPixel(x, y, DARK_GRID);
-				gfx_drawPixel(x, y+1, DARK_GRID);
-			} else if (((x % 25) == 0) || ((y % 25) == 0)) {
-				gfx_drawPixel(x, y, LIGHT_GRID);
-			}
-		}
-	}
-	gfx_drawRoundRect(0, 0, 800, 480, 15, DARK_GRID);
-	gfx_drawRoundRect(1, 1, 798, 478, 15, DARK_GRID);
-	gfx_drawRoundRect(2, 2, 796, 476, 15, DARK_GRID);
-}
-
-/*
- * This then uses the DMA2D peripheral to copy a digit from the
- * pre-rendered digit buffer, and render it into the main display
- * area. It does what many people call a "cookie cutter" blit, which
- * is that the pixels that have color (are non-zero) are rendered
- * but when the digit buffer has a value of '0' the background is
- * rendered.
- *
- * The digit colors are stored in the Foreground color lookup
- * table, they are as passed in, except color 0 (background)
- * is always 0.
- *
- * DMA2D is set up to read the original image (which has alpha of
- * 0xff (opaque) and then it multiples that alpha and the color
- * alpha, and 0xFF renders the digit color opaquely, 0x00 renders
- * the existing color. When drawing drop shadows we use an alpha
- * of 0x80 which makes the drop shadows 50% transparent.
- */
-#ifndef DMA2D_FG_CLUT
-#define DMA2D_FG_CLUT	(uint32_t *)(DMA2D_BASE + 0x0400UL)
-#endif
-#ifndef DMA2D_BG_CLUT
-#define DMA2D_BG_CLUT	(uint32_t *)(DMA2D_BASE + 0x0800UL)
-#endif
-
-#define N_FRAMES	10
-uint32_t frame_times[N_FRAMES] = {
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
-int te_lock = 1;
-
-/*
- * This is the code for the simple DMA2D Demo
- *
- * Basically it lets you put display digits on the
- * screen manually or with the DMA2D peripheral. It
- * has various 'bling' levels, and it tracks performance
- * by measuring how long it takes to go from one frame
- * to the next.
+ * Lets see if we can look at MEMs microphones
  */
 int
 main(void) {
 	int i;
 	int	x0, y0, x1, y1;
 	int	y2, y3;
+	GFX_CTX	*g;
 
 	/* Enable the clock to the DMA2D device */
 	rcc_periph_clock_enable(RCC_DMA2D);
 	fprintf(stderr, "MEMS Microphone Demo program\n");
 
-	gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAME_BUFFER);
-	dma2d_fill(0x0);
-	create_reticule(50, 25, LIGHT_GRID);
+	g = gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAMEBUFFER_ADDRESS);
+	dma2d_clear(&screen, DMA2D_GREY);
+	(void) create_reticule();
 	x0 = 51;
 	y0 = TOP_MARGIN + 25 + RET_HEIGHT/2;
 	y2 = TOP_MARGIN + 25 + RET_HEIGHT/2;
@@ -346,12 +218,15 @@ main(void) {
 		y1 =  (int) (100 * sin((float) i * M_PI / 100.0)) + 25 + TOP_MARGIN + RET_HEIGHT/2;
 		y3 =  (int) (100 * cos((float) i * M_PI / 100.0)) + 25 + TOP_MARGIN + RET_HEIGHT/2;
 		x1 = i + 51;
-		gfx_drawLine(x0, y0, x1, y1, YELLOW);
-		gfx_drawLine(x0, y2, x1, y3, MAGENTA);
+		gfx_move_to(g, x0, y0);
+		gfx_draw_line(g, (x1 - x0), (y1 - y0), GFX_COLOR_YELLOW);
+		gfx_move_to(g, x0, y2);
+		gfx_draw_line(g, x1 - x0, y3 - y2, GFX_COLOR_MAGENTA);
 		x0 = x1;
 		y0 = y1;
 		y2 = y3;
 	}
+	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
 	lcd_flip(0);
 	while (1) {
 	}
