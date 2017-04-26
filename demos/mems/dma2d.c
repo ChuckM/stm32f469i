@@ -153,6 +153,7 @@ dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y)
 	DMA2D_BGPFCCR = dst->mode;
 	DMA2D_NLR = DMA2D_SET(NLR, PL, src->w) | src->h; /* all of the src */
 
+#if 0
 	printf("FG Settings:\n");
 	printf("   FGMAR = 0x%0x\n", (uint32_t) DMA2D_FGMAR);
 	printf(" FGPFCCR = 0x%0x\n", (uint32_t) DMA2D_FGPFCCR);
@@ -169,6 +170,7 @@ dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y)
 	printf("  OMAR = 0x%0x\n", (uint32_t) DMA2D_OMAR);
 	printf("  OOR = 0x%0x\n", (uint32_t) DMA2D_OOR);
 	printf("  NLR = 0x%0x\n", (uint32_t) DMA2D_NLR);
+#endif
 
 	/* kick it off */
 	DMA2D_CR |= DMA2D_CR_START;

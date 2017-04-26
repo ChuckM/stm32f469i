@@ -201,6 +201,11 @@ create_reticule(void)
 	return (DMA2D_BITMAP *)&reticule;
 }
 
+extern void gen_data(void);
+extern float r_x[];
+extern float i_x[];
+extern int ri_len;
+
 /*
  * Lets see if we can look at MEMs microphones
  */
@@ -209,6 +214,10 @@ main(void) {
 	int i;
 	int	x0, y0, x1, y1;
 	int	y2, y3;
+	int baseline;
+	float	dx, dy;
+	float data_min, data_max;
+	float scale;
 	GFX_CTX	*g;
 
 	/* Enable the clock to the DMA2D device */
@@ -219,17 +228,31 @@ main(void) {
 	dma2d_clear(&screen, DMA2D_GREY);
 	(void) create_reticule();
 	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
+	gen_data();
+	data_min = data_max = 0;
+	for (i = 0; i < ri_len; i++) {
+		data_min = (r_x[i] < data_min) ? r_x[i] : data_min;
+		data_min = (i_x[i] < data_min) ? i_x[i] : data_min;
+		data_max = (r_x[i] > data_max) ? r_x[i] : data_max;
+		data_max = (i_x[i] > data_max) ? i_x[i] : data_max;
+	}
+	scale = (float) reticule.b_h / (data_max - data_min);
+	printf("Min/Max/Scale = %f/%f/%f\n", data_min, data_max, scale);
+	baseline = reticule.o_y + reticule.b_h - (data_min * scale);
+
+	dy = data_min * scale;
+	dx = (float) reticule.b_w / (float) ri_len;
 	x0 = reticule.o_x;
-	y0 = reticule.o_y + reticule.b_h / 2;
-	y2 = reticule.o_y + reticule.b_h / 2 + 100;
-	for (i = 0; i < reticule.b_w; i++) {
-		y1 =  (int) (100 * sin((float) i * M_PI / 100.0)) + 25 + reticule.b_h/2;
-		y3 =  (int) (100 * cos((float) i * M_PI / 100.0)) + 25 + reticule.b_h/2;
-		x1 = i + reticule.o_x;
+	y0 = (baseline) - (int) ((r_x[0] - data_min) * scale);
+	y2 = (baseline) - (int) ((i_x[i] - data_min) * scale);
+	for (i = 1; i < ri_len; i ++) {
+		x1 = (i * dx) + reticule.o_x;
+		y1 =  (baseline) - (int) ((r_x[i] - data_min) * scale) + dy;
+		y3 =  (baseline) - (int) ((i_x[i] - data_min) * scale) + dy;
 		gfx_move_to(g, x0, y0);
-		gfx_draw_line(g, (x1 - x0), (y1 - y0), GFX_COLOR_YELLOW);
+		gfx_draw_line_to(g, x1, y1, GFX_COLOR_YELLOW);
 		gfx_move_to(g, x0, y2);
-		gfx_draw_line(g, x1 - x0, y3 - y2, GFX_COLOR_MAGENTA);
+		gfx_draw_line_to(g, x1, y3, GFX_COLOR_MAGENTA);
 		x0 = x1;
 		y0 = y1;
 		y2 = y3;
