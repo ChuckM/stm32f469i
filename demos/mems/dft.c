@@ -76,11 +76,32 @@ add_freq(sample_buffer *s, float f, float a)
 	}
 }
 
+void add_triangle(sample_buffer *, float, float);
+
+/*
+ * add_triangle( ... )
+ *
+ * Add a triangle wave to the sample buffer.
+ */
+void
+add_triangle(sample_buffer *s, float f, float a)
+{
+	int i;
+	float per = s->r / f;
+	float dp = s->r / f;
+	float *buf = s->data;
+
+	for (i = 0; i < s->n; i++) {
+		*buf += a * (i % (int) per) / per;
+	}
+}
+
 #define SAMP_SIZE 1024
 #define SAMP_RATE 8192
 
 float r_x[SAMP_SIZE / 2];
 float i_x[SAMP_SIZE / 2];
+float res_dft[SAMP_SIZE / 2];
 int ri_len = SAMP_SIZE / 2;
 
 void gen_data(void);
@@ -101,9 +122,9 @@ gen_data(void)
 	memset(s_data, 0, sizeof(s_data));
 
 	/* why does 600 give us zero? */
-	add_freq(&sb, 300, 2);
-	add_freq(&sb, 200, 2);
-	add_freq(&sb, 100, 1);
+	for (i = 0; i < 9; i++) {
+		add_freq(&sb, 32 * i + 64 + i, 1.5);
+	}
 	data_min = data_max = 0;
 	for (i = 0; i < sb.n; i++) {
 		data_min = (*(sb.data + i) < data_min) ? *(sb.data+i) : data_min;
@@ -130,7 +151,8 @@ gen_data(void)
 		}
 		r_x[i] = (2 * r_x[i]) / (SAMP_SIZE / 2);
 		i_x[i] = (-2 * i_x[i]) / (SAMP_SIZE / 2);
-		printf("%d of %d\n", i, SAMP_SIZE/2);
+		printf("\r%d of %d ... ", i, SAMP_SIZE/2);
+		fflush(stdout);
 #ifdef DEBUG
 		printf("DFT[%3d] (%10.2fhz) = %10.4f, %10.4f \t:", f, q, r_x[i], i_x[i]);
 		r_val = 40 * r_x[i] + 40;

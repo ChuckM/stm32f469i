@@ -204,6 +204,7 @@ create_reticule(void)
 extern void gen_data(void);
 extern float r_x[];
 extern float i_x[];
+extern float res_dft[];
 extern int ri_len;
 
 /*
@@ -212,12 +213,12 @@ extern int ri_len;
 int
 main(void) {
 	int i;
-	int	x0, y0, x1, y1;
-	int	y2, y3;
+	int	x0, x1;
+	int	py0, py1;
 	int baseline;
-	float	dx, dy;
+	float	dx;
 	float data_min, data_max;
-	float scale;
+	float scale, peak;
 	GFX_CTX	*g;
 
 	/* Enable the clock to the DMA2D device */
@@ -229,33 +230,32 @@ main(void) {
 	(void) create_reticule();
 	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
 	gen_data();
+#if 0
+	/* generate the complex conjugate */
+	for (i = 0; i < ri_len; i++) {
+		i_x[i] = -i_x[i];
+	}
+#endif
 	data_min = data_max = 0;
 	for (i = 0; i < ri_len; i++) {
-		data_min = (r_x[i] < data_min) ? r_x[i] : data_min;
-		data_min = (i_x[i] < data_min) ? i_x[i] : data_min;
-		data_max = (r_x[i] > data_max) ? r_x[i] : data_max;
-		data_max = (i_x[i] > data_max) ? i_x[i] : data_max;
+		peak = res_dft[i] = sqrt(r_x[i] * r_x[i] + i_x[i] * i_x[i]);
+		data_min = (peak < data_min) ? peak : data_min;
+		data_max = (peak > data_max) ? peak : data_max;
 	}
 	scale = (float) reticule.b_h / (data_max - data_min);
 	printf("Min/Max/Scale = %f/%f/%f\n", data_min, data_max, scale);
 	baseline = reticule.o_y + reticule.b_h - (data_min * scale);
 
-	dy = data_min * scale;
 	dx = (float) reticule.b_w / (float) ri_len;
 	x0 = reticule.o_x;
-	y0 = (baseline) - (int) ((r_x[0] - data_min) * scale);
-	y2 = (baseline) - (int) ((i_x[i] - data_min) * scale);
+	py0 = baseline - (int)(((res_dft[0]) - data_min) * scale);
 	for (i = 1; i < ri_len; i ++) {
 		x1 = (i * dx) + reticule.o_x;
-		y1 =  (baseline) - (int) ((r_x[i] - data_min) * scale) + dy;
-		y3 =  (baseline) - (int) ((i_x[i] - data_min) * scale) + dy;
-		gfx_move_to(g, x0, y0);
-		gfx_draw_line_to(g, x1, y1, GFX_COLOR_YELLOW);
-		gfx_move_to(g, x0, y2);
-		gfx_draw_line_to(g, x1, y3, GFX_COLOR_MAGENTA);
+		py1 = baseline - (int)((res_dft[i] - data_min) * scale);
+		gfx_move_to(g, x0, py0);
+		gfx_draw_line_to(g, x1, py1, GFX_COLOR_YELLOW);
 		x0 = x1;
-		y0 = y1;
-		y2 = y3;
+		py0 = py1;
 	}
 	lcd_flip(0);
 	while (1) {

@@ -112,10 +112,6 @@ dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y)
 {
 	int		i;
 	
-	printf("dma2d_render:\n");
-	printf("    src [w, h] = [%d, %d]\n", src->w, src->h);
-	printf("    dst [w, h] = [%d, %d]\n", dst->w, dst->h);
-
 	/* We derive the DMA2D settings from the fields of
  	 * the bitmap structure. Note that on 'dst' index 
  	 * color modes are not supported and I'm not using
@@ -134,7 +130,6 @@ dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y)
 	if (src->maxc > 0) {
 		DMA2D_FGPFCCR |= (src->maxc) << DMA2D_FGPFCCR_CS_SHIFT;
 		for (i = 0; i < src->maxc; i++) {
-			printf("CLUT[%d] = 0x%0x\n", i, (unsigned int) *(src->clut + i));
 			*(DMA2D_FG_CLUT + i) = *(src->clut + i);
 		}
 	}
@@ -142,7 +137,6 @@ dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y)
 	/* pixel data */
 	i = mode2bpp[dst->mode] / 8; /* bytes per pixel */
 
-	printf("Computed bytes per pixel : %d\n", i);
 	DMA2D_BGMAR = (uint32_t) (((uint8_t *)dst->buf) + (dst->w * i * y) + (x * i));
 
 	DMA2D_BGOR = dst->w - src->w;
@@ -152,25 +146,6 @@ dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y)
 	DMA2D_BGCOLR = src->bg.raw;
 	DMA2D_BGPFCCR = dst->mode;
 	DMA2D_NLR = DMA2D_SET(NLR, PL, src->w) | src->h; /* all of the src */
-
-#if 0
-	printf("FG Settings:\n");
-	printf("   FGMAR = 0x%0x\n", (uint32_t) DMA2D_FGMAR);
-	printf(" FGPFCCR = 0x%0x\n", (uint32_t) DMA2D_FGPFCCR);
-	printf("    FGOR = 0x%0x\n", (uint32_t) DMA2D_FGOR);
-	printf("  FGCOLR = 0x%0x\n", (uint32_t) DMA2D_FGCOLR);
-
-	printf("BG Settings:\n");
-	printf("   BGMAR = 0x%0x\n", (uint32_t) DMA2D_BGMAR);
-	printf(" BGPFCCR = 0x%0x\n", (uint32_t) DMA2D_BGPFCCR);
-	printf("    BGOR = 0x%0x\n", (uint32_t) DMA2D_BGOR);
-	printf("  BGCOLR = 0x%0x\n", (uint32_t) DMA2D_BGCOLR);
-
-	printf("Output Settings:\n");
-	printf("  OMAR = 0x%0x\n", (uint32_t) DMA2D_OMAR);
-	printf("  OOR = 0x%0x\n", (uint32_t) DMA2D_OOR);
-	printf("  NLR = 0x%0x\n", (uint32_t) DMA2D_NLR);
-#endif
 
 	/* kick it off */
 	DMA2D_CR |= DMA2D_CR_START;
