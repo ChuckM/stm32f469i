@@ -201,8 +201,9 @@ create_reticule(void)
 	return (DMA2D_BITMAP *)&reticule;
 }
 
-extern void gen_data(void);
+extern void gen_data(int);
 extern float r_x[];
+extern float s_data[];
 extern float i_x[];
 extern float res_dft[];
 extern int ri_len;
@@ -214,6 +215,7 @@ int
 main(void) {
 	int i;
 	int	x0, x1;
+	int	y0, y1;
 	int	py0, py1;
 	int baseline;
 	float	dx;
@@ -229,7 +231,7 @@ main(void) {
 	dma2d_clear(&screen, DMA2D_GREY);
 	(void) create_reticule();
 	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
-	gen_data();
+	gen_data(0);
 #if 0
 	/* generate the complex conjugate */
 	for (i = 0; i < ri_len; i++) {
@@ -256,6 +258,27 @@ main(void) {
 		gfx_draw_line_to(g, x1, py1, GFX_COLOR_YELLOW);
 		x0 = x1;
 		py0 = py1;
+	}
+	/* plot the original waveform */
+	data_min = data_max = 0;
+	for (i = 0; i < ri_len * 2; i++) {
+		data_min = (s_data[i] < data_min) ? s_data[i] : data_min;
+		data_max = (s_data[i] > data_max) ? s_data[i] : data_max;
+	}
+	scale = (float) reticule.b_h / (data_max - data_min);
+	scale *= .80; /* scale to 80 % */
+	dx = (float) reticule.b_w / (float) (ri_len * 2);
+	printf("(waveform ) Min/Max/Scale = %f/%f/%f\n", data_min, data_max, scale);
+	baseline = (reticule.o_y + reticule.b_h - (data_min * scale)) - 15;
+	x0 = reticule.o_x;
+	y0 = baseline - (int)(((s_data[0]) - data_min) * scale);
+	for (i = 1; i < ri_len * 2; i++) {
+		x1 = (i * dx) + reticule.o_x;
+		y1 = baseline - (int)(((s_data[i]) - data_min) * scale);
+		gfx_move_to(g, x0, y0);
+		gfx_draw_line_to(g, x1, y1, GFX_COLOR_CYAN);
+		x0 = x1;
+		y0 = y1;
 	}
 	lcd_flip(0);
 	while (1) {

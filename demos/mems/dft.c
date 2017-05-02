@@ -24,8 +24,8 @@ typedef struct {
 	int		r;
 } sample_buffer;
 
-float cos_basis(int, float);
-float sin_basis(int, float);
+float cos_basis(float, float);
+float sin_basis(float, float);
 void add_freq(sample_buffer *, float, float);
 
 /*
@@ -36,7 +36,7 @@ void add_freq(sample_buffer *, float, float);
  *	t is the time.
  */
 float
-cos_basis(int f, float t)
+cos_basis(float f, float t)
 {
 	return cos(2 * M_PI * f * t);
 }
@@ -45,7 +45,7 @@ cos_basis(int f, float t)
  * This is the sin basis function
  */
 float
-sin_basis(int f, float t)
+sin_basis(float f, float t)
 {
 	return sin(2 * M_PI * f * t);
 }
@@ -77,22 +77,44 @@ add_freq(sample_buffer *s, float f, float a)
 }
 
 void add_triangle(sample_buffer *, float, float);
+void add_square(sample_buffer *, float, float);
 
 /*
  * add_triangle( ... )
  *
  * Add a triangle wave to the sample buffer.
+ *
+ * seconds per sample * sample # = time
+ * period is seconds per period.
+ * seconds / period - int seconds = percentage of period.
  */
 void
 add_triangle(sample_buffer *s, float f, float a)
 {
 	int i;
-	float per = s->r / f;
-	float dp = s->r / f;
+	float period = (float) s->r / f;
+	float t;
 	float *buf = s->data;
 
 	for (i = 0; i < s->n; i++) {
-		*buf += a * (i % (int) per) / per;
+		t = (float) i / period;
+		t = t - (int) t;
+		*buf += a * t;
+		buf++;
+	}
+}
+
+void
+add_square(sample_buffer *s, float f, float a)
+{
+	int i;
+	int per = s->r / (2 * f);
+	float *buf = s->data;
+
+	printf("Square wave period is %d\n", per);
+	for (i = 0; i < s->n; i++) {
+		*buf += ((i / per) & 1) * a;
+		buf++;
 	}
 }
 
@@ -103,16 +125,16 @@ float r_x[SAMP_SIZE / 2];
 float i_x[SAMP_SIZE / 2];
 float res_dft[SAMP_SIZE / 2];
 int ri_len = SAMP_SIZE / 2;
+float s_data[SAMP_SIZE];
 
-void gen_data(void);
+void gen_data(int opt);
 
 void
-gen_data(void)
+gen_data(int opt)
 {
 	sample_buffer	sb;
-	float	s_data[SAMP_SIZE];
-	float data_min, data_max;
-	int	i, k, f;
+	float f, data_min, data_max;
+	int	i, k;
 
 	sb.data = s_data;
 	sb.n = SAMP_SIZE;
@@ -121,9 +143,18 @@ gen_data(void)
 	/* clear sample data */
 	memset(s_data, 0, sizeof(s_data));
 
-	/* why does 600 give us zero? */
-	for (i = 0; i < 9; i++) {
-		add_freq(&sb, 32 * i + 64 + i, 1.5);
+	switch (opt) {
+		default:
+			for (i = 0; i < 9; i++) {
+				add_freq(&sb, 32 * i + 64 + i, 1.5);
+			}
+			break;
+		case 1:
+			add_triangle(&sb, 100.0, 1.5);
+			break;
+		case 2:
+			add_square(&sb, 100.0, 1.5);
+			break;
 	}
 	data_min = data_max = 0;
 	for (i = 0; i < sb.n; i++) {
@@ -141,7 +172,7 @@ gen_data(void)
 	for (i = 1; i < SAMP_SIZE/2; i++) {
 		float t;
 
-		f = (4096 * i) / 4096;
+		f = (float) (4096 * i) / 4096.0;
 		r_x[i] = 0;
 		i_x[i] = 0;
 		for (k = 0; k < SAMP_SIZE; k++) {
@@ -153,26 +184,6 @@ gen_data(void)
 		i_x[i] = (-2 * i_x[i]) / (SAMP_SIZE / 2);
 		printf("\r%d of %d ... ", i, SAMP_SIZE/2);
 		fflush(stdout);
-#ifdef DEBUG
-		printf("DFT[%3d] (%10.2fhz) = %10.4f, %10.4f \t:", f, q, r_x[i], i_x[i]);
-		r_val = 40 * r_x[i] + 40;
-		i_val = 40 * i_x[i] + 40;
-		for (j = 0; j < 80; j++) {
-			if ((j > i_val) && (j > r_val)) {
-				break;
-			}
-			if (j == i_val) {
-				printf("I");
-			} else if (j == r_val) {
-				printf("R");
-			} else if (j == 40) {
-				printf("+");
-			} else {
-				printf(" ");
-			}
-		}
-		printf("\n");
-#endif
 	}
 	printf("Done.\n");
 }
