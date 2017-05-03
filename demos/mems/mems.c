@@ -38,8 +38,6 @@ GFX_VIEW __local_view;
 #define MAP_Y(vp, inY)	(int)((vp->h) - (((inY) + (vp)->oy) / (vp)->sy) + (vp->y))
 
 /*
-p
-q
  * Create a transform that will scale between floating
  * point (x,y) co-ordinates into a region on the display
  * screen.
@@ -71,24 +69,13 @@ gfx_viewport(GFX_CTX *g, int x, int y, int w, int h,
 }
 
 /*
- * Note may want to flip Y axes here to get more "intuitive" plotting.
+ * Note we flip Y axes here to get more "intuitive" plotting.
  */
 void
 plot(GFX_VIEW *v, float x0, float y0, float x1, float y1, GFX_COLOR c)
 {
-	int	d_x0, d_y0, d_x1, d_y1;
-
-	d_x0 = MAP_X(v, x0);
-	d_y0 = MAP_Y(v, y0);
-	d_x1 = MAP_X(v, x1);
-	d_y1 = MAP_Y(v, y1);
-#if 0
-	printf("[%f, %f] => [%f, %f] maps to [%d, %d] => [%d, %d]\n",
-		x0, y0, x1, y1, d_x0, d_y0, d_x1, d_y1);
-#endif
-
-	gfx_move_to(v->g, d_x0, d_y0);
-	gfx_draw_line_to(v->g, d_x1, d_y1, c);
+	gfx_move_to(v->g, MAP_X(v, x0), MAP_Y(v, y0));
+	gfx_draw_line_to(v->g, MAP_X(v, x1), MAP_Y(v, y1), c);
 }
 
 /*
@@ -287,15 +274,8 @@ extern int ri_len;
 int
 main(void) {
 	int i;
-	int	x0, x1;
-#ifndef USE_VIEWPORT
-	int	y0, y1;
-#endif
-	int	py0, py1;
-	int baseline;
-	float	dx;
 	float data_min, data_max;
-	float scale, peak;
+	float peak;
 	GFX_CTX	*g;
 	GFX_VIEW *vp;
 
@@ -307,7 +287,7 @@ main(void) {
 	dma2d_clear(&screen, DMA2D_GREY);
 	(void) create_reticule();
 	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
-	gen_data(0);
+	gen_data(2);
 #if 0
 	/* generate the complex conjugate */
 	for (i = 0; i < ri_len; i++) {
@@ -320,21 +300,12 @@ main(void) {
 		data_min = (peak < data_min) ? peak : data_min;
 		data_max = (peak > data_max) ? peak : data_max;
 	}
-	scale = (float) reticule.b_h / (data_max - data_min);
-	printf("Min/Max/Scale = %f/%f/%f\n", data_min, data_max, scale);
-	baseline = reticule.o_y + reticule.b_h - (data_min * scale);
-
-	dx = (float) reticule.b_w / (float) ri_len;
-	x0 = reticule.o_x;
-	py0 = baseline - (int)(((res_dft[0]) - data_min) * scale);
-	for (i = 1; i < ri_len; i ++) {
-		x1 = (i * dx) + reticule.o_x;
-		py1 = baseline - (int)((res_dft[i] - data_min) * scale);
-		gfx_move_to(g, x0, py0);
-		gfx_draw_line_to(g, x1, py1, GFX_COLOR_YELLOW);
-		x0 = x1;
-		py0 = py1;
+	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
+			0, data_min, (float) ri_len, data_max);
+	for (i = 1; i < ri_len; i++) {
+		plot(vp, i - 1, res_dft[i -1], i, res_dft[i], GFX_COLOR_YELLOW);
 	}
+
 	/* plot the original waveform */
 	data_min = data_max = 0;
 	for (i = 0; i < ri_len * 2; i++) {
@@ -343,27 +314,9 @@ main(void) {
 	}
 	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
 			0, data_min, (float) ri_len * 2.0, data_max);
-#ifdef USE_VIEWPORT
 	for (i = 1; i < ri_len * 2; i++) {
 		plot(vp, i - 1, s_data[i -1], i, s_data[i], GFX_COLOR_DKCYAN);
 	}
-#else
-	scale = (float) reticule.b_h / (data_max - data_min);
-	scale *= .80; /* scale to 80 % */
-	dx = (float) reticule.b_w / (float) (ri_len * 2);
-	printf("(waveform ) Min/Max/Scale = %f/%f/%f\n", data_min, data_max, scale);
-	baseline = (reticule.o_y + reticule.b_h - (data_min * scale)) - 15;
-	x0 = reticule.o_x;
-	y0 = baseline - (int)(((s_data[0]) - data_min) * scale) - 100;
-	for (i = 1; i < ri_len * 2; i++) {
-		x1 = (i * dx) + reticule.o_x;
-		y1 = baseline - (int)(((s_data[i]) - data_min) * scale) - 100;
-		gfx_move_to(g, x0, y0);
-		gfx_draw_line_to(g, x1, y1, GFX_COLOR_DKCYAN);
-		x0 = x1;
-		y0 = y1;
-	}
-#endif
 	lcd_flip(0);
 	while (1) {
 	}
