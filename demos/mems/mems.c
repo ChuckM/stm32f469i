@@ -18,6 +18,79 @@
 #include "../util/util.h"
 #include "dma2d.h"
 
+typedef struct {
+	GFX_CTX		*g;
+	float		sx, sy;		/* X scale and Y scale */
+	float		ox, oy;		/* offset X and offset Y */
+	int			x, y, w, h;	/* box on the screen to use */
+} GFX_VIEW;
+
+void plot(GFX_VIEW *v, float x0, float y0, float x1, float y1, GFX_COLOR c);
+GFX_VIEW *gfx_viewport(GFX_CTX *g, int x, int y, int w, int h, 
+	float min_x, float min_y, float max_x, float max_y);
+
+#define USE_VIEWPORT
+
+GFX_VIEW __local_view;
+
+#define MAP_X(vp, inX)	(int)((((inX) + (vp)->ox) / (vp)->sx) + (vp->x))
+/* flip Y from 'natural' co-ordinates (+Y goes 'up') to 'display' (+y goes 'down') */
+#define MAP_Y(vp, inY)	(int)((vp->h) - (((inY) + (vp)->oy) / (vp)->sy) + (vp->y))
+
+/*
+p
+q
+ * Create a transform that will scale between floating
+ * point (x,y) co-ordinates into a region on the display
+ * screen.
+ */
+GFX_VIEW *
+gfx_viewport(GFX_CTX *g, int x, int y, int w, int h, 
+	float min_x, float min_y, float max_x, float max_y)
+{
+	GFX_VIEW *res = &__local_view;
+	memset(res, 0, sizeof(GFX_VIEW));
+	res->g = g;
+	res->x = x;
+	res->y = y;
+	res->w = w;
+	res->h = h;
+	
+	res->sx = (max_x - min_x) / (float) w;
+	res->sy = (max_y - min_y) / (float) h;
+	res->ox = -min_x;
+	res->oy = -min_y;
+	printf("Computed view port:\n");
+	printf("    (x, y, w, h) = (%d, %d, %d, %d)\n",
+			x, y, w, h);
+	printf("   (%f) X axis %f => %f, becomes %d => %d\n", res->sx,
+		min_x, max_x, MAP_X(res, min_x), MAP_X(res, max_x));
+	printf("   (%f) Y axis %f => %f, becomes %d => %d\n", res->sy,
+		min_y, max_y, MAP_Y(res, min_y), MAP_Y(res, max_y));
+	return &__local_view;
+}
+
+/*
+ * Note may want to flip Y axes here to get more "intuitive" plotting.
+ */
+void
+plot(GFX_VIEW *v, float x0, float y0, float x1, float y1, GFX_COLOR c)
+{
+	int	d_x0, d_y0, d_x1, d_y1;
+
+	d_x0 = MAP_X(v, x0);
+	d_y0 = MAP_Y(v, y0);
+	d_x1 = MAP_X(v, x1);
+	d_y1 = MAP_Y(v, y1);
+#if 0
+	printf("[%f, %f] => [%f, %f] maps to [%d, %d] => [%d, %d]\n",
+		x0, y0, x1, y1, d_x0, d_y0, d_x1, d_y1);
+#endif
+
+	gfx_move_to(v->g, d_x0, d_y0);
+	gfx_draw_line_to(v->g, d_x1, d_y1, c);
+}
+
 /*
  * MEMS Setup
  * -------------------------------------------------------
@@ -215,13 +288,16 @@ int
 main(void) {
 	int i;
 	int	x0, x1;
+#ifndef USE_VIEWPORT
 	int	y0, y1;
+#endif
 	int	py0, py1;
 	int baseline;
 	float	dx;
 	float data_min, data_max;
 	float scale, peak;
 	GFX_CTX	*g;
+	GFX_VIEW *vp;
 
 	/* Enable the clock to the DMA2D device */
 	rcc_periph_clock_enable(RCC_DMA2D);
@@ -265,21 +341,29 @@ main(void) {
 		data_min = (s_data[i] < data_min) ? s_data[i] : data_min;
 		data_max = (s_data[i] > data_max) ? s_data[i] : data_max;
 	}
+	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
+			0, data_min, (float) ri_len * 2.0, data_max);
+#ifdef USE_VIEWPORT
+	for (i = 1; i < ri_len * 2; i++) {
+		plot(vp, i - 1, s_data[i -1], i, s_data[i], GFX_COLOR_DKCYAN);
+	}
+#else
 	scale = (float) reticule.b_h / (data_max - data_min);
 	scale *= .80; /* scale to 80 % */
 	dx = (float) reticule.b_w / (float) (ri_len * 2);
 	printf("(waveform ) Min/Max/Scale = %f/%f/%f\n", data_min, data_max, scale);
 	baseline = (reticule.o_y + reticule.b_h - (data_min * scale)) - 15;
 	x0 = reticule.o_x;
-	y0 = baseline - (int)(((s_data[0]) - data_min) * scale);
+	y0 = baseline - (int)(((s_data[0]) - data_min) * scale) - 100;
 	for (i = 1; i < ri_len * 2; i++) {
 		x1 = (i * dx) + reticule.o_x;
-		y1 = baseline - (int)(((s_data[i]) - data_min) * scale);
+		y1 = baseline - (int)(((s_data[i]) - data_min) * scale) - 100;
 		gfx_move_to(g, x0, y0);
-		gfx_draw_line_to(g, x1, y1, GFX_COLOR_CYAN);
+		gfx_draw_line_to(g, x1, y1, GFX_COLOR_DKCYAN);
 		x0 = x1;
 		y0 = y1;
 	}
+#endif
 	lcd_flip(0);
 	while (1) {
 	}
