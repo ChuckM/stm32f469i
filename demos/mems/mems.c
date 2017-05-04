@@ -16,6 +16,7 @@
 #include <gfx.h>
 
 #include "../util/util.h"
+#include "signal.h"
 #include "dma2d.h"
 
 /*
@@ -29,8 +30,6 @@
 #define DMA2D_WHITE	(DMA2D_COLOR){.raw=0xffffffff}
 #define DMA2D_GREY	(DMA2D_COLOR){.raw=0xff444444}
 
-/* another frame buffer 2MB "before" the standard one */
-#define BACKGROUND_FB (FRAMEBUFFER_ADDRESS - 0x200000U)
 #define MAX_OPTS	6
 
 GFX_COLOR ret_colors[] = {
@@ -208,6 +207,35 @@ extern float i_x[];
 extern float res_dft[];
 extern int ri_len;
 
+#define SAMP_SIZE	1024
+#define	SAMP_RATE	8192
+
+float *sample_data = (float *) (0xc0000000);
+float *result_data, *re_x, *im_x;
+
+void dft(sample_buffer *s, float rx[], float ix[]);
+
+/* This out of DSP for engineers and scientists */
+void
+dft(sample_buffer *s, float rx[], float ix[])
+{
+	int	i, k, n;
+	n = s->n / 2;
+	for (i = 0; i < n; i++) {
+		rx[i] = ix[i] = 0;
+	}
+	printf("DFT :\n");
+	for (k = 0; k < n; k++) {
+		printf("\r  %d of %d ... ", k, n);
+		fflush(stdout);
+		for (i = 0; i < s->n; i++) {
+			rx[k] = rx[k] + s->data[i] * cos_basis((float) k, (float) i / (float) s->n);
+			ix[k] = ix[k] - s->data[i] * sin_basis((float) k, (float) i / (float) s->n);
+		}
+	}
+	printf("Done.\n");
+}
+
 /*
  * Lets see if we can look at MEMs microphones
  */
@@ -216,17 +244,66 @@ main(void) {
 	int i;
 	float data_min, data_max;
 	float peak;
+	sample_buffer sb;
 	GFX_CTX	*g;
 	GFX_VIEW *vp;
 
+	result_data = sample_data + SAMP_SIZE;
+	re_x = result_data + SAMP_SIZE;
+	im_x = re_x + SAMP_SIZE;
 	/* Enable the clock to the DMA2D device */
 	rcc_periph_clock_enable(RCC_DMA2D);
-	fprintf(stderr, "MEMS Microphone Demo program\n");
+	fprintf(stderr, "FFT Exploration Demo program\n");
 
 	g = gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAMEBUFFER_ADDRESS);
 	dma2d_clear(&screen, DMA2D_GREY);
 	(void) create_reticule();
 	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
+
+	sb.data = sample_data;
+	sb.n = SAMP_SIZE;
+	sb.r = SAMP_RATE;
+	memset(sample_data, 0, sizeof(float) * SAMP_SIZE);
+
+
+	
+	/* fill sample data with a signal */
+	add_cos(&sb, 75.0, 1.0);
+
+	/* compute DFT per article */
+	dft(&sb, re_x, im_x);
+	
+	/* show our original signal */
+	data_min = data_max = 0;
+	for (i = 0; i < sb.n; i++) {
+		data_min = (sample_data[i] < data_min) ? sample_data[i] : data_min;
+		data_max = (sample_data[i] > data_max) ? sample_data[i] : data_max;
+	}
+	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
+			0, data_min, (float) sb.n, data_max);
+	for (i = 1; i < sb.n; i++) {
+		vp_plot(vp, i - 1, sample_data[i -1], i, sample_data[i], GFX_COLOR_DKGREY);
+	}
+
+	/* now plot real and imaginary DFT values */
+	data_min = data_max = 0;
+	/* note they are back to back but half as long so one pass at full length
+ 	 * gets min/max from both.
+	 */
+	for (i = 0; i < sb.n; i++) {
+		data_min = (re_x[i] < data_min) ? re_x[i] : data_min;
+		data_max = (re_x[i] > data_max) ? re_x[i] : data_max;
+	}
+	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
+			0, data_min, (float) sb.n / 2, data_max);
+	for (i = 1; i < sb.n/2; i++) {
+		vp_plot(vp, i - 1, re_x[i - 1], i, re_x[i], GFX_COLOR_MAGENTA);
+		vp_plot(vp, i - 1, im_x[i -1], i, im_x[i], GFX_COLOR_CYAN);
+	}
+	lcd_flip(0);
+	while (1) ;
+
+	/* This section currently unused */
 	gen_data(0);
 	/* plot the original waveform */
 	data_min = data_max = 0;

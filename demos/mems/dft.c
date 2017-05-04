@@ -12,111 +12,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
-
-/*
- * This is a bucket of samples, is is 'n' samples long.
- * And it represents collecting them at a rate 'r' per
- * second. So a total of n / r seconds worth of signal.
- */
-typedef struct {
-	float	*data;
-	int		n;
-	int		r;
-} sample_buffer;
-
-float cos_basis(float, float);
-float sin_basis(float, float);
-void add_freq(sample_buffer *, float, float);
-
-/*
- * basis function
- *
- * This is a basis function (cos)
- *	f is the frequency
- *	t is the time.
- */
-float
-cos_basis(float f, float t)
-{
-	return cos(2 * M_PI * f * t);
-}
-
-/*
- * This is the sin basis function
- */
-float
-sin_basis(float f, float t)
-{
-	return sin(2 * M_PI * f * t);
-}
-
-/*
- * add_freq( ... )
- *
- * Add in a signal at this frequency and amplitude into
- * the sample buffer. 
- *
- * Scaled to a 12 bit value (0 == 2048, -1 = 0, +1 = 2048)
- */
-void
-add_freq(sample_buffer *s, float f, float a)
-{
-	int	i;
-	float *buf = s->data;
-
-	/*
-	 * n is samples
-	 * r is rate (samples per second)
-	 * f is frequency (cycles per second)
-	 * what span is (n / r) seconds / f = cyles /n is cycles per sample?
-	 */
-	for (i = 0; i < s->n; i++ ) {
-		*buf += a * cos(2 * M_PI * f * i / s->r);
-		buf++;
-	}
-}
-
-void add_triangle(sample_buffer *, float, float);
-void add_square(sample_buffer *, float, float);
-
-/*
- * add_triangle( ... )
- *
- * Add a triangle wave to the sample buffer.
- *
- * seconds per sample * sample # = time
- * period is seconds per period.
- * seconds / period - int seconds = percentage of period.
- */
-void
-add_triangle(sample_buffer *s, float f, float a)
-{
-	int i;
-	float period = (float) s->r / f;
-	float t;
-	float *buf = s->data;
-
-	for (i = 0; i < s->n; i++) {
-		t = (float) i / period;
-		t = t - (int) t;
-		*buf += a * t;
-		buf++;
-	}
-}
-
-void
-add_square(sample_buffer *s, float f, float a)
-{
-	int i;
-	int per = s->r / (2 * f);
-	float *buf = s->data;
-
-	printf("Square wave period is %d\n", per);
-	for (i = 0; i < s->n; i++) {
-		*buf += ((i / per) & 1) * a;
-		buf++;
-	}
-}
+#include "signal.h"
 
 #define SAMP_SIZE 1024
 #define SAMP_RATE 8192
@@ -147,7 +43,7 @@ gen_data(int opt)
 		case 3:
 			/* waves smeared over bin size */
 			for (i = 0; i < 9; i++) {
-				add_freq(&sb, 32 * i + 64 + i, 1.5);
+				add_cos(&sb, 32 * i + 64 + i, 1.5);
 			}
 			break;
 		case 1:
@@ -160,9 +56,9 @@ gen_data(int opt)
 			break;
 		default:
 			/* a C chord */
-			add_freq(&sb, 130.81, 1.0);
-			add_freq(&sb, 164.81, 1.0);
-			add_freq(&sb, 196, 1.0);
+			add_cos(&sb, 130.81, 1.0);
+			add_cos(&sb, 164.81, 1.0);
+			add_cos(&sb, 196, 1.0);
 			break;
 	}
 	data_min = data_max = 0;
