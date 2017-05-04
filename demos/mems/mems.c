@@ -18,66 +18,6 @@
 #include "../util/util.h"
 #include "dma2d.h"
 
-typedef struct {
-	GFX_CTX		*g;
-	float		sx, sy;		/* X scale and Y scale */
-	float		ox, oy;		/* offset X and offset Y */
-	int			x, y, w, h;	/* box on the screen to use */
-} GFX_VIEW;
-
-void plot(GFX_VIEW *v, float x0, float y0, float x1, float y1, GFX_COLOR c);
-GFX_VIEW *gfx_viewport(GFX_CTX *g, int x, int y, int w, int h, 
-	float min_x, float min_y, float max_x, float max_y);
-
-#define USE_VIEWPORT
-
-GFX_VIEW __local_view;
-
-#define MAP_X(vp, inX)	(int)((((inX) + (vp)->ox) / (vp)->sx) + (vp->x))
-/* flip Y from 'natural' co-ordinates (+Y goes 'up') to 'display' (+y goes 'down') */
-#define MAP_Y(vp, inY)	(int)((vp->h) - (((inY) + (vp)->oy) / (vp)->sy) + (vp->y))
-
-/*
- * Create a transform that will scale between floating
- * point (x,y) co-ordinates into a region on the display
- * screen.
- */
-GFX_VIEW *
-gfx_viewport(GFX_CTX *g, int x, int y, int w, int h, 
-	float min_x, float min_y, float max_x, float max_y)
-{
-	GFX_VIEW *res = &__local_view;
-	memset(res, 0, sizeof(GFX_VIEW));
-	res->g = g;
-	res->x = x;
-	res->y = y;
-	res->w = w;
-	res->h = h;
-	
-	res->sx = (max_x - min_x) / (float) w;
-	res->sy = (max_y - min_y) / (float) h;
-	res->ox = -min_x;
-	res->oy = -min_y;
-	printf("Computed view port:\n");
-	printf("    (x, y, w, h) = (%d, %d, %d, %d)\n",
-			x, y, w, h);
-	printf("   (%f) X axis %f => %f, becomes %d => %d\n", res->sx,
-		min_x, max_x, MAP_X(res, min_x), MAP_X(res, max_x));
-	printf("   (%f) Y axis %f => %f, becomes %d => %d\n", res->sy,
-		min_y, max_y, MAP_Y(res, min_y), MAP_Y(res, max_y));
-	return &__local_view;
-}
-
-/*
- * Note we flip Y axes here to get more "intuitive" plotting.
- */
-void
-plot(GFX_VIEW *v, float x0, float y0, float x1, float y1, GFX_COLOR c)
-{
-	gfx_move_to(v->g, MAP_X(v, x0), MAP_Y(v, y0));
-	gfx_draw_line_to(v->g, MAP_X(v, x1), MAP_Y(v, y1), c);
-}
-
 /*
  * MEMS Setup
  * -------------------------------------------------------
@@ -287,25 +227,7 @@ main(void) {
 	dma2d_clear(&screen, DMA2D_GREY);
 	(void) create_reticule();
 	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
-	gen_data(2);
-#if 0
-	/* generate the complex conjugate */
-	for (i = 0; i < ri_len; i++) {
-		i_x[i] = -i_x[i];
-	}
-#endif
-	data_min = data_max = 0;
-	for (i = 0; i < ri_len; i++) {
-		peak = res_dft[i] = sqrt(r_x[i] * r_x[i] + i_x[i] * i_x[i]);
-		data_min = (peak < data_min) ? peak : data_min;
-		data_max = (peak > data_max) ? peak : data_max;
-	}
-	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
-			0, data_min, (float) ri_len, data_max);
-	for (i = 1; i < ri_len; i++) {
-		plot(vp, i - 1, res_dft[i -1], i, res_dft[i], GFX_COLOR_YELLOW);
-	}
-
+	gen_data(0);
 	/* plot the original waveform */
 	data_min = data_max = 0;
 	for (i = 0; i < ri_len * 2; i++) {
@@ -315,7 +237,20 @@ main(void) {
 	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
 			0, data_min, (float) ri_len * 2.0, data_max);
 	for (i = 1; i < ri_len * 2; i++) {
-		plot(vp, i - 1, s_data[i -1], i, s_data[i], GFX_COLOR_DKCYAN);
+		vp_plot(vp, i - 1, s_data[i -1], i, s_data[i], GFX_COLOR_DKCYAN);
+	}
+
+	/* plot the magnitude vector for the DFT */
+	data_min = data_max = 0;
+	for (i = 0; i < ri_len; i++) {
+		peak = res_dft[i] = sqrt(r_x[i] * r_x[i] + i_x[i] * i_x[i]);
+		data_min = (peak < data_min) ? peak : data_min;
+		data_max = (peak > data_max) ? peak : data_max;
+	}
+	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
+			0, data_min, (float) ri_len, data_max);
+	for (i = 1; i < ri_len; i++) {
+		vp_plot(vp, i - 1, res_dft[i -1], i, res_dft[i], GFX_COLOR_YELLOW);
 	}
 	lcd_flip(0);
 	while (1) {

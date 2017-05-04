@@ -144,16 +144,25 @@ gen_data(int opt)
 	memset(s_data, 0, sizeof(s_data));
 
 	switch (opt) {
-		default:
+		case 3:
+			/* waves smeared over bin size */
 			for (i = 0; i < 9; i++) {
 				add_freq(&sb, 32 * i + 64 + i, 1.5);
 			}
 			break;
 		case 1:
+			/* triangle wave */
 			add_triangle(&sb, 100.0, 1.5);
 			break;
 		case 2:
+			/* square wave */
 			add_square(&sb, 100.0, 1.5);
+			break;
+		default:
+			/* a C chord */
+			add_freq(&sb, 130.81, 1.0);
+			add_freq(&sb, 164.81, 1.0);
+			add_freq(&sb, 196, 1.0);
 			break;
 	}
 	data_min = data_max = 0;
