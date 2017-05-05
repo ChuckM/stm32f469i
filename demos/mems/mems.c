@@ -200,20 +200,19 @@ create_reticule(void)
 	return (DMA2D_BITMAP *)&reticule;
 }
 
-extern void gen_data(int);
-extern float r_x[];
-extern float s_data[];
-extern float i_x[];
-extern float res_dft[];
-extern int ri_len;
-
 #define SAMP_SIZE	1024
 #define	SAMP_RATE	8192
 
-float *sample_data = (float *) (0xc0000000);
-float *result_data, *re_x, *im_x, *fft_data;
+typedef struct {
+	float	*d;
+	int	sz;
+	float	max_val;
+	float	min_val;
+} DFT_RESULT;
 
-void dft(sample_buffer *s, float rx[], float ix[]);
+float *sample_data, *result_data, *re_x, *im_x, *fft_data;
+
+void dft(sample_buffer *s, float min_freq, float max_freq, int bins, float rx[], float ix[], float mag[]);
 
 /* 
  * dft( ... )
@@ -221,116 +220,76 @@ void dft(sample_buffer *s, float rx[], float ix[]);
  * Compute the Discrete Fourier Transform using the
  * correlation method. This out of DSP for engineers and scientists 
  *
- *
-	Original just pass 'k' as the frequency 
-		rx[k] = rx[k] + s->data[i] * cos_basis((float) k, (float) i / (float) s->n);
-		ix[k] = ix[k] + (- s->data[i] * sin_basis((float) k, (float) i / (float) s->n));
-
-
-	Change 1
- 		We didn't average them before, does that change behavior? 
-		Answer: no, it didn't seem to change it at all. But Y went from 0 to 512.0 to 0 to 1.0
- 
-		rx[k] /= n;
-		ix[k] /= n;
-
-	Change 2a, make f go from 0 to .5 ? 
-		This suggests that our basis functions aren't doing exactly
-		what we expect, or we've coded them to accidently work.
-		f = (float) ((s->n/2) * k) / (s->n / 2.0);
-
-	Change 2b, use k * 4096 / 4096 as the frequency 
-		rx[k] = rx[k] + s->data[i] * cos_basis(f, (float) i / (float) s->n);
-		ix[k] = ix[k] + (- s->data[i] * sin_basis(f, (float) i / (float) s->n));
-
-	Change 3, don't use the function, compute it here 
-		Frequency is 2*pi*f*t (f is freq, t is time k/sample_rate) 
-		Result was all noise, no peak 
-	Change 3
-		For debugging, lets see where it "thinks" we're seeing a peak
-		in the spectrum.
-
-	Change 4 is different frequency calc, k is 0 - 512 
-	Change 4, make it look like add_cos()
 */
+#define DEBUG_DFT
 void
-dft(sample_buffer *s, float rx[], float ix[])
+dft(sample_buffer *s, float min_freq, float max_freq, int bins, float rx[], float ix[], float mag[])
 {
-	int	i, k, n;
+	int	i, k;
 	float peak_freq, max_value;
-	n = s->n / 2;
-	for (i = 0; i < n; i++) {
-		rx[i] = ix[i] = 0;
-	}
-	printf("DFT :\n");
+
+#ifdef DEBUG_DFT
+	printf("DFT : %fhz through %fhz (%fhz)\n",
+		min_freq, min_freq + (float) (bins - 1) * (max_freq - min_freq) / (float) bins, max_freq);
+#endif
 	max_value = 0;
 	peak_freq = 0;
-	for (k = 0; k < n; k++) {
-		float f, mag;
-		printf("\r  %d of %d ... ", k, n);
+	/* run through each bin */
+	for (k = 0; k < bins; k++) {
+		float current_freq;
+#ifdef DEBUG_DFT
+		printf("\r  %d of %d ... ", k, bins);
 		fflush(stdout);
-		/* set end frequency to 1Khz */
-		f = 300.0 + k * 400.0 / (float) n;
+#endif
+		/* current frequency based on bin # and frequency span */
+		current_freq = min_freq + k * (max_freq - min_freq) / (float) bins;
+
 		rx[k] = 0;
 		ix[k] = 0;
+		mag[k] = 0;
+		/* correlate this frequency with each sample */
 		for (i = 0; i < s->n; i++) {
 			float r;
 
 			/* compute correlation */
-			r = 2 * M_PI * f * i / s->r;
+			r = 2 * M_PI * current_freq * i / s->r;
 			rx[k] = rx[k] + s->data[i] * cos(r);
 			ix[k] = ix[k] + (- s->data[i] * sin(r));
 		}
-		mag = sqrt(rx[k] * rx[k] + ix[k] * ix[k]);
-		if (mag >= max_value) {
-			peak_freq = f;
-			max_value = mag;
+		/* magnitude of the correlation */
+		mag[k] = sqrt(rx[k] * rx[k] + ix[k] * ix[k]);
+#ifdef DEBUG_DFT
+		if (mag[k] >= max_value) {
+			peak_freq = current_freq; 
+			max_value = mag[k];
 		}
+#endif
 	}
+#ifdef DEBUG_DFT
 	printf("Done.\n");
 	printf("Max value: %f, frequency %f\n", max_value, peak_freq);
-}
-
-#if 0
-void old_dft(float *q, float *ix, float *rx);
-void
-old_dft(float *q, float *ix, float *rx)
-{
-	float f;
-	float	*x_r = rx;
-	float	*x_i = ix;
-	float	*s_data = q;
-
-	for (i = 1; i < SAMP_SIZE/2; i++) {
-		float t;
-
-		f = (float) (4096 * i) / 4096.0;
-		x_r[i] = 0;
-		x_i[i] = 0;
-		for (k = 0; k < SAMP_SIZE; k++) {
-			t = (float) k / (float) SAMP_RATE;
-			x_r[i] += o_data[k] * cos_basis(f, t);
-			x_i[i] += o_data[k] * sin_basis(f, t);
-		}
-		x_r[i] = (2 * x_r[i]) / (SAMP_SIZE / 2);
-		x_i[i] = (-2 * i_x[i]) / (SAMP_SIZE / 2);
-		printf("\r%d of %d ... ", i, SAMP_SIZE/2);
-		fflush(stdout);
-	}
-}
 #endif
+
+}
+
 /*
  * Lets see if we can look at MEMs microphones
+ * Mems microphone comes in on
+ * PD6 (SPI3 MOSI/5) (SAI1_SDA/6) (USART2 RX/7) (FMC_NWAIT/12) (DCMI_D10/13) (LCD_B2/14) 
+ * MEMs clock is on 
+ * PD13 (TM4_CH2/2) (QUADSPI_BK1_IO3/9) (FMC_A18/12)
+ * So somehow we use timer 4 to clock USART2 in a synchronous mode to get microphone data.
+ * 
  */
 int
 main(void) {
-	int i;
+	int i, bins;
 	float data_min, data_max;
-	float peak;
 	sample_buffer sb;
 	GFX_CTX	*g;
 	GFX_VIEW *vp;
 
+	sample_data = (float *)(0xc0000000);
 	result_data = sample_data + SAMP_SIZE;
 	re_x = result_data + SAMP_SIZE;
 	im_x = re_x + SAMP_SIZE;
@@ -357,10 +316,10 @@ main(void) {
 	add_cos(&sb, 500.0, 1.0);
 	add_cos(&sb, 600.0, 1.0);
 
-	/* compute DFT per article */
-	dft(&sb, re_x, im_x);
 	
-	/* show our original signal */
+	/*
+	 * show our original signal
+	 */
 	data_min = data_max = 0;
 	for (i = 0; i < sb.n; i++) {
 		data_min = (sample_data[i] < data_min) ? sample_data[i] : data_min;
@@ -369,17 +328,22 @@ main(void) {
 	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
 			0, data_min, (float) sb.n, data_max);
 	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n", 
-		0.0, data_min, (double) sb.n, data_max);
+				0.0, data_min, (double) sb.n, data_max);
 	for (i = 1; i < sb.n; i++) {
 		vp_plot(vp, i - 1, sample_data[i -1], i, sample_data[i], GFX_COLOR_DKGREY);
 	}
 
-	/* now plot real and imaginary DFT values */
-	data_min = data_max = 0;
-	/* note they are back to back but half as long so one pass at full length
- 	 * gets min/max from both.
+	/*
+	 * Apply the DFT and compute real and imaginary
+	 * components.
 	 */
-	for (i = 0; i < sb.n; i++) {
+
+	bins = reticule.b_w; /* scaled to size of reticule */
+	dft(&sb, 300.0, 700.0, bins, re_x, im_x, fft_data);	/* compute DFT per article */
+
+#ifdef PLOT_RAW
+	data_min = data_max = 0;
+	for (i = 0; i < sb.n / 2; i++) {
 		data_min = (re_x[i] < data_min) ? re_x[i] : data_min;
 		data_max = (re_x[i] > data_max) ? re_x[i] : data_max;
 		data_min = (im_x[i] < data_min) ? im_x[i] : data_min;
@@ -388,57 +352,31 @@ main(void) {
 	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
 			0, data_min, (float) sb.n / 2.0, data_max);
 	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n", 
-		0.0, data_min, (double) sb.n / 2.0, data_max);
-	for (i = 1; i < sb.n/2; i++) {
+		0.0, data_min, (double) bins, data_max);
+	for (i = 1; i < bins; i++) {
 		vp_plot(vp, i - 1, re_x[i - 1], i, re_x[i], GFX_COLOR_MAGENTA);
 		vp_plot(vp, i - 1, im_x[i -1], i, im_x[i], GFX_COLOR_CYAN);
 	}
+#endif
 
-	/* compute magnitude data */
+	/*
+	 * Build DFT_RESULT structure 
+	 * Plot the magnitude data from the DFT
+	 */
 	data_min = data_max = 0;
-	for (i = 0; i < sb.n / 2; i++) {
-		fft_data[i] = sqrt(re_x[i] * re_x[i] + im_x[i] * im_x[i]);
+	for (i = 0; i < bins; i++) {
 		data_min = (fft_data[i] < data_min) ? fft_data[i] : data_min;
 		data_max = (fft_data[i] > data_max) ? fft_data[i] : data_max;
 	}
+
 	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
-			0, data_min, (float) sb.n / 2.0, data_max);
+			0, data_min, (float) bins, data_max);
 	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n", 
-		0.0, data_min, (double) sb.n / 2.0, data_max);
-	for (i = 1; i < sb.n/2; i++) {
-		vp_plot(vp, i - 1, fft_data[i - 1], i, fft_data[i], GFX_COLOR_WHITE);
+		0.0, data_min, (float)  bins, data_max);
+	for (i = 1; i < bins; i++) {
+		vp_plot(vp, i - 1, fft_data[i - 1], i, fft_data[i], GFX_COLOR_YELLOW);
 	}
 
 	lcd_flip(0);
 	while (1) ;
-
-	/* This section currently unused */
-	gen_data(0);
-	/* plot the original waveform */
-	data_min = data_max = 0;
-	for (i = 0; i < ri_len * 2; i++) {
-		data_min = (s_data[i] < data_min) ? s_data[i] : data_min;
-		data_max = (s_data[i] > data_max) ? s_data[i] : data_max;
-	}
-	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
-			0, data_min, (float) ri_len * 2.0, data_max);
-	for (i = 1; i < ri_len * 2; i++) {
-		vp_plot(vp, i - 1, s_data[i -1], i, s_data[i], GFX_COLOR_DKCYAN);
-	}
-
-	/* plot the magnitude vector for the DFT */
-	data_min = data_max = 0;
-	for (i = 0; i < ri_len; i++) {
-		peak = res_dft[i] = sqrt(r_x[i] * r_x[i] + i_x[i] * i_x[i]);
-		data_min = (peak < data_min) ? peak : data_min;
-		data_max = (peak > data_max) ? peak : data_max;
-	}
-	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
-			0, data_min, (float) ri_len, data_max);
-	for (i = 1; i < ri_len; i++) {
-		vp_plot(vp, i - 1, res_dft[i -1], i, res_dft[i], GFX_COLOR_YELLOW);
-	}
-	lcd_flip(0);
-	while (1) {
-	}
 }
