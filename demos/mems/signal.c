@@ -15,25 +15,63 @@
 #include "signal.h"
 
 /*
- * basis function
+ * clear_samples( ... )
  *
- * This is a basis function (cos)
- *	f is the frequency
- *	t is the time.
+ * Simple function to clear samples, and yes you coud just
+ * inline the memset call. 
  */
-float
-cos_basis(float f, float t)
+void
+clear_samples(sample_buffer *s)
 {
-	return cos(2 * M_PI * f * t);
+	memset(s->data, 0, sizeof(sample_t) * s->n);
 }
 
 /*
- * This is the sin basis function
+ * set_minmax( ... )
+ *
+ * This code sets the sample buffer's min and max values
+ * based on whether the indicated sample is above or below
+ * them. 
  */
-float
-sin_basis(float f, float t)
+void
+set_minmax(sample_buffer *s, int ndx)
 {
-	return sin(2 * M_PI * f * t);
+	s->sample_max = (s->data[ndx] > s->sample_max) ? s->data[ndx] : s->sample_max;
+	s->sample_min = (s->data[ndx] < s->sample_min) ? s->data[ndx] : s->sample_min;
+}
+
+/*
+ * alloc_buf( ... )
+ *
+ * Allocate a signal buffer. Basically this code is a very simple memory allocator
+ * that starts at 0xc0000000 (where DRAM starts on the STM32F469-Disco board) and
+ * starts eating chunks each time you allocate. There isn't an "actual" memory
+ * allocator here so free doesn't actually do anything. Also it doesn't know
+ * about malloc/free so it might give weird results if you've adjusted malloc
+ * to use that space.
+ */
+sample_buffer *
+alloc_buf(int size) {
+	sample_buffer *res;
+
+	res = malloc(sizeof(sample_buffer));
+	/* clear it to zeros */
+	memset(res, 0, sizeof(sample_buffer));
+	res->data = malloc(sizeof(sample_t) * size);
+	memset(res->data, 0, sizeof(sample_t) * size);
+	res->n = size;
+	/* return, data and 'n' are initialized */
+	return res;
+}
+
+void
+free_buf(sample_buffer *sb)
+{
+	free(sb->data);
+	sb->data = 0x0;
+	sb->n = 0;
+	free(sb);
+	return;
 }
 
 /*
@@ -46,7 +84,6 @@ void
 add_cos(sample_buffer *s, float f, float a)
 {
 	int	i;
-	float *buf = s->data;
 
 	/*
 	 * n is samples
@@ -55,8 +92,8 @@ add_cos(sample_buffer *s, float f, float a)
 	 * what span is (n / r) seconds / f = cyles /n is cycles per sample?
 	 */
 	for (i = 0; i < s->n; i++ ) {
-		*buf += a * cos(2 * M_PI * f * i / s->r);
-		buf++;
+		s->data[i] += (sample_t) (a * cos(2 * M_PI * f * i / s->r));
+		set_minmax(s, i);
 	}
 }
 
@@ -65,37 +102,113 @@ add_cos(sample_buffer *s, float f, float a)
  * add_triangle( ... )
  *
  * Add a triangle wave to the sample buffer.
- *
- * seconds per sample * sample # = time
- * period is seconds per period.
- * seconds / period - int seconds = percentage of period.
+ * Note it goes from -1/2a to +1/2a to avoid
+ * having a DC component.
  */
 void
 add_triangle(sample_buffer *s, float f, float a)
 {
 	int i;
-	float period = (float) s->r / f;
+	float level = a / 2.0;
 	float t;
-	float *buf = s->data;
 
 	for (i = 0; i < s->n; i++) {
-		t = (float) i / period;
-		t = t - (int) t;
-		*buf += a * t;
-		buf++;
+		s->data[i] += (sample_t) ((a * modff(f * (float) i / (float) s->r, &t)) - level);
+		set_minmax(s, i);
 	}
 }
 
+/*
+ * add_square( ... )
+ *
+ * Add a square wave to the sample buffer.
+ * Note that it goes from -1/2a to +1/2a to avoid a DC component.
+ */
 void
 add_square(sample_buffer *s, float f, float a)
 {
 	int i;
-	int per = s->r / (2 * f);
-	float *buf = s->data;
+	float level = a / 2.0;
+	float t;
 
-	printf("Square wave period is %d\n", per);
 	for (i = 0; i < s->n; i++) {
-		*buf += ((i / per) & 1) * a;
-		buf++;
+		s->data[i] += (sample_t) ((modff(f * (float) i / (float) s->r, &t) >= .5) ? level : -level);
+		set_minmax(s, i);
 	}
 }
+
+/* 
+ * dft( ... )
+ *
+ * Compute the Discrete Fourier Transform using the
+ * correlation method. This out of DSP for engineers and scientists 
+ * NOTE: It takes n^2 time to compute so above about 32 bins it
+ * really does take a long time.
+ */
+#define DEBUG_DFT
+void
+dft(sample_buffer *s, float min_freq, float max_freq, int bins, 
+	sample_buffer *rx, sample_buffer *im, sample_buffer *mag)
+{
+	int	i, k;
+	float peak_freq, max_value;
+
+#ifdef DEBUG_DFT
+	printf("DFT : %fhz through %fhz (%fhz)\n",
+		min_freq, min_freq + (float) (bins - 1) * (max_freq - min_freq) / (float) bins, max_freq);
+#endif
+	max_value = 0;
+	peak_freq = 0;
+	/* run through each bin */
+	rx->sample_max = rx->sample_min = 0;
+	im->sample_max = im->sample_min = 0;
+	mag->sample_max = mag->sample_min = 0;
+	for (k = 0; k < bins; k++) {
+		float current_freq;
+#ifdef DEBUG_DFT
+		printf("\r  %d of %d ... ", k, bins);
+		fflush(stdout);
+#endif
+		/* don't overwrite random memory, so check array bound */
+		if ((k >= rx->n) || (k >= im->n) || (k >= mag->n)) {
+			break;
+		}
+		/* current frequency based on bin # and frequency span */
+		current_freq = min_freq + k * (max_freq - min_freq) / (float) bins;
+
+		rx->data[k] = 0;
+		im->data[k] = 0;
+		mag->data[k] = 0;
+		/* correlate this frequency with each sample */
+		for (i = 0; i < s->n; i++) {
+			float r;
+
+			/* compute correlation */
+			r = 2 * M_PI * current_freq * i / s->r;
+			rx->data[k] = rx->data[k] + s->data[i] * cos(r);
+			im->data[k] = im->data[k] + (- s->data[i] * sin(r));
+		}
+
+		
+		/* magnitude of the correlation */
+		mag->data[k] = sqrt(rx->data[k] * rx->data[k] + im->data[k] * im->data[k]);
+
+		/* track minimum and maximum */
+		set_minmax(rx, k);
+		set_minmax(im, k);
+		set_minmax(mag, k);
+
+#ifdef DEBUG_DFT
+		if (mag->data[k] >= max_value) {
+			peak_freq = current_freq; 
+			max_value = mag->data[k];
+		}
+#endif
+	}
+#ifdef DEBUG_DFT
+	printf("Done.\n");
+	printf("Max value: %f, frequency %f\n", max_value, peak_freq);
+#endif
+
+}
+
