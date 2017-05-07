@@ -1,4 +1,6 @@
 #pragma once
+#include <stdint.h>
+#include <string.h> /* for memset */
 
 /* For the Cortex-4F samples are SP floating point */
 typedef float sample_t;
@@ -15,11 +17,19 @@ typedef struct {
 	sample_t	*data;
 } sample_buffer;
 
+#define min(x, y)	((x < y) ? x : y)
+#define max(x, y)	((x > y) ? x : y)
+
+#define set_minmax(s, ndx)	{ s->sample_min = min(s->sample_min, s->data[ndx]); \
+							  s->sample_max = max(s->sample_max, s->data[ndx]); }
+
+#define reset_minmax(s)		s->sample_min = s->sample_max = 0
+
+#define clear_samples(s)	memset(s->data, 0, sizeof(sample_t) * s->n)
+
 /*
  * Some syntactic sugar to make this oft used code
  */
-void set_minmax(sample_buffer *s, int ndx);
-void clear_samples(sample_buffer *s);
 sample_buffer *alloc_buf(int size);
 void free_buf(sample_buffer *buf);
 void add_cos(sample_buffer *, float, float);

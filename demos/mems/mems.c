@@ -31,6 +31,8 @@
 
 #define MAX_OPTS	6
 
+#define COLOR_DARKGREEN	(GFX_COLOR){.c={0x00, 0x55, 0x00, 0xff}}
+
 GFX_COLOR ret_colors[] = {
 	(GFX_COLOR) {.raw=0x0},	/* 0 = transparent black */
 	GFX_COLOR_BLACK, 	/* 1 = BLACK (opaque) */
@@ -255,7 +257,7 @@ main(void) {
 				0.0, signal->sample_min, (double) signal->n, signal->sample_max);
 	for (i = 1; i < signal->n; i++) {
 		vp_plot(vp, i - 1, *(signal->data + (i -1)),
-					    i, *(signal->data + i), GFX_COLOR_DKGREY);
+					    i, *(signal->data + i), COLOR_DARKGREEN);
 	}
 	lcd_flip(0);
 

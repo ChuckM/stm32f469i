@@ -15,32 +15,6 @@
 #include "signal.h"
 
 /*
- * clear_samples( ... )
- *
- * Simple function to clear samples, and yes you coud just
- * inline the memset call. 
- */
-void
-clear_samples(sample_buffer *s)
-{
-	memset(s->data, 0, sizeof(sample_t) * s->n);
-}
-
-/*
- * set_minmax( ... )
- *
- * This code sets the sample buffer's min and max values
- * based on whether the indicated sample is above or below
- * them. 
- */
-void
-set_minmax(sample_buffer *s, int ndx)
-{
-	s->sample_max = (s->data[ndx] > s->sample_max) ? s->data[ndx] : s->sample_max;
-	s->sample_min = (s->data[ndx] < s->sample_min) ? s->data[ndx] : s->sample_min;
-}
-
-/*
  * alloc_buf( ... )
  *
  * Allocate a signal buffer. Basically this code is a very simple memory allocator
@@ -58,8 +32,9 @@ alloc_buf(int size) {
 	/* clear it to zeros */
 	memset(res, 0, sizeof(sample_buffer));
 	res->data = malloc(sizeof(sample_t) * size);
-	memset(res->data, 0, sizeof(sample_t) * size);
 	res->n = size;
+	clear_samples(res);
+
 	/* return, data and 'n' are initialized */
 	return res;
 }
@@ -151,24 +126,14 @@ dft(sample_buffer *s, float min_freq, float max_freq, int bins,
 	sample_buffer *rx, sample_buffer *im, sample_buffer *mag)
 {
 	int	i, k;
-	float peak_freq, max_value;
 
-#ifdef DEBUG_DFT
-	printf("DFT : %fhz through %fhz (%fhz)\n",
-		min_freq, min_freq + (float) (bins - 1) * (max_freq - min_freq) / (float) bins, max_freq);
-#endif
-	max_value = 0;
-	peak_freq = 0;
 	/* run through each bin */
 	rx->sample_max = rx->sample_min = 0;
 	im->sample_max = im->sample_min = 0;
 	mag->sample_max = mag->sample_min = 0;
 	for (k = 0; k < bins; k++) {
 		float current_freq;
-#ifdef DEBUG_DFT
-		printf("\r  %d of %d ... ", k, bins);
-		fflush(stdout);
-#endif
+
 		/* don't overwrite random memory, so check array bound */
 		if ((k >= rx->n) || (k >= im->n) || (k >= mag->n)) {
 			break;
@@ -183,7 +148,19 @@ dft(sample_buffer *s, float min_freq, float max_freq, int bins,
 		for (i = 0; i < s->n; i++) {
 			float r;
 
-			/* compute correlation */
+			/* compute correlation, r is radians 
+			 * 2pi is 'radians/cycle'
+			 * current_freq is 'cycles/second'
+			 * i is 'sample'
+			 * s->r is 'sample(s)/second'
+			 *
+			 *       radians   cycles    sample   seconds
+			 * r =   ------- * ------- * ------ * -------
+ 			 *        cycle    seconds     1      samples
+			 *
+			 * note that cycle cancels cycles, sample cancels samples, and
+			 * seconds cancels seconds leaving you with just radians.
+			 */
 			r = 2 * M_PI * current_freq * i / s->r;
 			rx->data[k] = rx->data[k] + s->data[i] * cos(r);
 			im->data[k] = im->data[k] + (- s->data[i] * sin(r));
@@ -198,17 +175,7 @@ dft(sample_buffer *s, float min_freq, float max_freq, int bins,
 		set_minmax(im, k);
 		set_minmax(mag, k);
 
-#ifdef DEBUG_DFT
-		if (mag->data[k] >= max_value) {
-			peak_freq = current_freq; 
-			max_value = mag->data[k];
-		}
-#endif
 	}
-#ifdef DEBUG_DFT
-	printf("Done.\n");
-	printf("Max value: %f, frequency %f\n", max_value, peak_freq);
-#endif
 
 }
 
