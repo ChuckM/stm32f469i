@@ -216,6 +216,7 @@ create_reticule(void)
 int
 main(void) {
 	int i, bins;
+	uint32_t t0, t1;
 #ifdef PLOT_RAW
 	float data_min, data_max;
 #endif
@@ -267,11 +268,14 @@ main(void) {
 	 */
 
 	bins = reticule.b_w; /* scaled to size of reticule */
-	dft(signal, 50.0, 750.0, bins, re_x, im_x, fft);	/* compute DFT per article */
+	t0 = mtime();
+	calc_dft(signal, 50.0, 750.0, bins, re_x, im_x, fft);	/* compute DFT per article */
+	t1 = mtime();
+	printf("DFT Compute time %ld milliseconds\n", t1 - t0);
 
 #ifdef PLOT_RAW
-	data_min = (re_x->sample_min < im_x->sample_min) ? re_x->sample_min : im_x->sample_min;
-	data_max = (re_x->sample_max > im_x->sample_max) ? re_x->sample_max : im_x->sample_max;
+	data_min = min(re_x->sample_min, im_x->sample_min);
+	data_max = max(re_x->sample_max , im_x->sample_max);
 	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
 			0, data_min, (float) bins, data_max);
 	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
@@ -282,14 +286,28 @@ main(void) {
 	}
 #endif
 
-	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
+	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h/2,
 			0, fft->sample_min, (float) bins, fft->sample_max);
 	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
 		0.0, fft->sample_min, (float)  bins, fft->sample_max);
 	for (i = 1; i < bins; i++) {
 		vp_plot(vp, i - 1, fft->data[i - 1], i, fft->data[i], GFX_COLOR_YELLOW);
 	}
+	lcd_flip(0);
 
+	printf("Compute FFT\n");
+	t0 = mtime();
+	calc_fft(signal, 1024, fft);
+	t1 = mtime();
+	printf("Computed FFT in %ld milliseconds\n", t1 - t0);
+	vp = gfx_viewport(g, reticule.o_x, reticule.o_y + reticule.b_h/2, 
+						 reticule.b_w, reticule.b_h/2,
+			0, fft->sample_min, (float) fft->n, fft->sample_max);
+	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
+		0.0, fft->sample_min, (float)  fft->n, fft->sample_max);
+	for (i = 1; i < fft->n; i++) {
+		vp_plot(vp, i - 1, fft->data[i - 1], i, fft->data[i], GFX_COLOR_CYAN);
+	}
 	lcd_flip(0);
 	while (1) ;
 }

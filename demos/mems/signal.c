@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <complex.h>
 #include "signal.h"
 
 /*
@@ -29,10 +30,10 @@ alloc_buf(int size) {
 	sample_buffer *res;
 
 	res = malloc(sizeof(sample_buffer));
-	/* clear it to zeros */
-	memset(res, 0, sizeof(sample_buffer));
 	res->data = malloc(sizeof(sample_t) * size);
 	res->n = size;
+	/* clear it to zeros */
+	reset_minmax(res);
 	clear_samples(res);
 
 	/* return, data and 'n' are initialized */
@@ -67,7 +68,7 @@ add_cos(sample_buffer *s, float f, float a)
 	 * what span is (n / r) seconds / f = cyles /n is cycles per sample?
 	 */
 	for (i = 0; i < s->n; i++ ) {
-		s->data[i] += (sample_t) (a * cos(2 * M_PI * f * i / s->r));
+		s->data[i] += (sample_t) (a * cosf(2 * M_PI * f * i / s->r));
 		set_minmax(s, i);
 	}
 }
@@ -88,7 +89,8 @@ add_triangle(sample_buffer *s, float f, float a)
 	float t;
 
 	for (i = 0; i < s->n; i++) {
-		s->data[i] += (sample_t) ((a * modff(f * (float) i / (float) s->r, &t)) - level);
+		s->data[i] += (sample_t) 
+			((a * modff(f * (float) i / (float) s->r, &t)) - level);
 		set_minmax(s, i);
 	}
 }
@@ -107,7 +109,8 @@ add_square(sample_buffer *s, float f, float a)
 	float t;
 
 	for (i = 0; i < s->n; i++) {
-		s->data[i] += (sample_t) ((modff(f * (float) i / (float) s->r, &t) >= .5) ? level : -level);
+		s->data[i] += (sample_t) 
+			((modff(f * (float) i / (float) s->r, &t) >= .5) ? level : -level);
 		set_minmax(s, i);
 	}
 }
@@ -120,16 +123,15 @@ add_square(sample_buffer *s, float f, float a)
  * NOTE: It takes n^2 time to compute so above about 32 bins it
  * really does take a long time.
  */
-#define DEBUG_DFT
 void
-dft(sample_buffer *s, float min_freq, float max_freq, int bins, 
+calc_dft(sample_buffer *s, float min_freq, float max_freq, int bins, 
 	sample_buffer *rx, sample_buffer *im, sample_buffer *mag)
 {
 	int	i, k;
 
 	/* run through each bin */
-	rx->sample_max = rx->sample_min = 0;
-	im->sample_max = im->sample_min = 0;
+	reset_minmax(rx); 
+	reset_minmax(im);
 	mag->sample_max = mag->sample_min = 0;
 	for (k = 0; k < bins; k++) {
 		float current_freq;
@@ -162,13 +164,14 @@ dft(sample_buffer *s, float min_freq, float max_freq, int bins,
 			 * seconds cancels seconds leaving you with just radians.
 			 */
 			r = 2 * M_PI * current_freq * i / s->r;
-			rx->data[k] = rx->data[k] + s->data[i] * cos(r);
-			im->data[k] = im->data[k] + (- s->data[i] * sin(r));
+			rx->data[k] = rx->data[k] + s->data[i] * cosf(r);
+			im->data[k] = im->data[k] + (- s->data[i] * sinf(r));
 		}
 
 		
 		/* magnitude of the correlation */
-		mag->data[k] = sqrt(rx->data[k] * rx->data[k] + im->data[k] * im->data[k]);
+		mag->data[k] = 
+				sqrt(rx->data[k] * rx->data[k] + im->data[k] * im->data[k]);
 
 		/* track minimum and maximum */
 		set_minmax(rx, k);
@@ -179,3 +182,120 @@ dft(sample_buffer *s, float min_freq, float max_freq, int bins,
 
 }
 
+#define MAX_FFT_BINS	1024
+/* FFT data buffer */
+complex float __fft_data[MAX_FFT_BINS];
+
+/* compute the magnitude of the complex phasor */
+#define MAGNITUDE(C)	sqrtf(creal((C)) * creal((C)) + cimag((C)) * cimag((C)))
+
+/*
+ * fft( ... )
+ *
+ * Given the set of complex points P represented
+ * by the two vectors re->data[P], im->data[P], compute
+ * the fast fourier transform in place. The length of
+ * re and im must be equal and a power of 2.
+ */
+void
+calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
+{
+	int i, j, k;
+	int q;
+	float t;
+	complex float alpha, uri, ur;
+
+	/* and they must be a power of 2 */
+	t = log(bins) / log(2);
+	if (modff(t, &t) > 0) {
+		return;
+	}
+	if (bins > MAX_FFT_BINS) {
+		return;
+	}
+	/* signal with zero imaginary component */
+	for (i = 0; i < bins; i++) {
+		__fft_data[i] = sig->data[i];
+	}
+
+	q = (int) t;
+
+	printf("Bits per index is %d\n", q);
+	/* This first bit is a reflection sort,
+	 * note that any index that is the same
+	 * LSB to MSB as MSB to LSB is not swapped.
+	 * we know 0 and n-1 will be symmetric so we
+	 * don't even look at them.
+	 */
+	for (i = 1; i < (bins - 1); i++) {
+		/* compute reflected index */
+		for (k = 0, j = 0; j < q; j++) {
+			k = (k << 1) | ((i >> j) & 1);
+		}
+		/*
+		 * Only swap lower value for higher value this
+	 	 * way we avoid swapping things twice when when
+		 * come across the higher index.
+		 */
+		if (k > i) {
+//			printf("Swap %d (i) with %d (k)\n", i, k);
+			/* swap values */
+			complex float tmp;
+			tmp = __fft_data[i];
+			__fft_data[i] = __fft_data[k];
+			__fft_data[k] = tmp;
+		}
+	}
+
+	/* 
+	 * now synthesize the frequency domain, 1 thru n
+	 * frequency domain 0 is easy, its just the value
+	 * in the bin because a 1 bin DFT is the spectrum
+	 * of that DFT.
+	 */
+	printf("%d stage bufferfly calculation\n", q);
+	for (i = 1; i < q; i++) {
+		int bfly_len = 2 << i;			/* Butterfly elements */
+		int half_bfly = 2 << (i-1);		/* Half-the butterfly */
+
+		/* nth root of K */
+		printf("Computing the roots of W(%d)\n", bfly_len);
+		/* unity root value (complex), nth instance of the Unity Root */
+		ur = 1.0;
+		/* unity root increment (complex) */
+		uri = cosf(2 * M_PI / bfly_len) - sinf(2 * M_PI / bfly_len) * I;
+		
+		/*
+		 * Run the calculation for each root.
+		 * We run 0 to nr - 1, because we take
+		 * advantage of the symmetry, at bin 0
+		 * we have root n, and at bin 0 + nr we
+		 * root n + 180 degrees (aka (- root n))
+		 * We apply both and do half number of
+		 * multiplies, win!
+		 */
+		for (j = 0; j < half_bfly ; j++) {
+			/* run the calculation across all bins */
+			printf(" Apply '%d'th root of %d, to [%d] and [%d] %d times\n", j, bfly_len,
+					j, j + half_bfly, bins/bfly_len);
+			for (k = j; k < bins; k += bfly_len) {
+				/*
+				 * Apply the FFT butterfly function to
+			 	 * P[n], P[n + half_bfly]
+				 * step 1, multiply our unity root by p[n + half_bfly]
+				 */
+				alpha = __fft_data[k + half_bfly] * ur;
+
+				/* now we sum it to P[k], and subtract it from P[k + nr] */
+				__fft_data[k] += alpha; 
+				__fft_data[k + half_bfly] -= alpha;
+			}
+			/* advance to the next fraction of the unity root */
+			ur = ur * uri;
+		}
+	}
+	for (i = 0; i < bins; i++) {
+		mag->data[i] = MAGNITUDE(__fft_data[i]);
+		set_minmax(mag, i);
+	}
+}
