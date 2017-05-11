@@ -243,10 +243,10 @@ main(void) {
 	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
 
 	/* fill signal buffer with test data */
-	add_triangle(signal, 110.0, 1.0);
-	add_cos(signal, 400.0, 1.5);
+	// add_triangle(signal, 110.0, 1.0);
+	// add_cos(signal, 400.0, 1.5);
 	add_cos(signal, 500.0, 1.0);
-	add_cos(signal, 600.0, 1.5);
+	// add_cos(signal, 600.0, 1.5);
 
 
 	/*

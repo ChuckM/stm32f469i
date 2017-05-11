@@ -182,9 +182,14 @@ calc_dft(sample_buffer *s, float min_freq, float max_freq, int bins,
 
 }
 
+#define DEBUG_FFT
+
 #define MAX_FFT_BINS	1024
 /* FFT data buffer */
 complex float __fft_data[MAX_FFT_BINS];
+#ifdef DEBUG_FFT
+uint16_t	indices[MAX_FFT_BINS];
+#endif
 
 /* compute the magnitude of the complex phasor */
 #define MAGNITUDE(C)	sqrtf(creal((C)) * creal((C)) + cimag((C)) * cimag((C)))
@@ -204,6 +209,7 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 	int q;
 	float t;
 	complex float alpha, uri, ur;
+	uint16_t	t16;
 
 	/* and they must be a power of 2 */
 	t = log(bins) / log(2);
@@ -216,6 +222,9 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 	/* signal with zero imaginary component */
 	for (i = 0; i < bins; i++) {
 		__fft_data[i] = sig->data[i];
+#ifdef DEBUG_FFT
+		indices[i] = i;
+#endif
 	}
 
 	q = (int) t;
@@ -238,9 +247,15 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 		 * come across the higher index.
 		 */
 		if (k > i) {
-//			printf("Swap %d (i) with %d (k)\n", i, k);
-			/* swap values */
 			complex float tmp;
+#ifdef DEBUG_FFT
+
+			
+			t16 = indices[i];
+			indices[i] = indices[k];
+			indices[k] = t16;
+#endif
+			/* swap values */
 			tmp = __fft_data[i];
 			__fft_data[i] = __fft_data[k];
 			__fft_data[k] = tmp;
@@ -253,7 +268,15 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 	 * in the bin because a 1 bin DFT is the spectrum
 	 * of that DFT.
 	 */
-	printf("%d stage bufferfly calculation\n", q);
+#ifdef DEBUG_FFT
+	printf("FFT Calc: %d stage bufferfly calculation\n", q);
+	printf("Reverse Sort: [");
+	for (i = 0; i < bins; i++) {
+		printf("%d, ", indices[i]);
+	}
+	printf("]\n");
+#endif
+
 	for (i = 1; i < q; i++) {
 		int bfly_len = 2 << i;			/* Butterfly elements */
 		int half_bfly = 2 << (i-1);		/* Half-the butterfly */
@@ -276,8 +299,8 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 		 */
 		for (j = 0; j < half_bfly ; j++) {
 			/* run the calculation across all bins */
-			printf(" Apply '%d'th root of %d, to [%d] and [%d] %d times\n", j, bfly_len,
-					j, j + half_bfly, bins/bfly_len);
+//			printf(" Apply '%d'th root of %d, to [%d] and [%d] %d times\n", j, bfly_len,
+//					j, j + half_bfly, bins/bfly_len);
 			for (k = j; k < bins; k += bfly_len) {
 				/*
 				 * Apply the FFT butterfly function to
@@ -289,11 +312,24 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 				/* now we sum it to P[k], and subtract it from P[k + nr] */
 				__fft_data[k] += alpha; 
 				__fft_data[k + half_bfly] -= alpha;
+#ifdef DEBUG_FFT
+				t16 = indices[k];
+				indices[k] = indices[k + half_bfly];
+				indices[k + half_bfly] = t16;
+#endif
 			}
 			/* advance to the next fraction of the unity root */
 			ur = ur * uri;
 		}
 	}
+#ifdef DEBUG_FFT
+	printf("FFT Calc: post %d stage bufferfly calculation\n", q);
+	printf("Reverse Sort: [");
+	for (i = 0; i < bins; i++) {
+		printf("%d, ", indices[i]);
+	}
+	printf("]\n");
+#endif
 	for (i = 0; i < bins; i++) {
 		mag->data[i] = MAGNITUDE(__fft_data[i]);
 		set_minmax(mag, i);
