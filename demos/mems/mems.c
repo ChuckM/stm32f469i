@@ -251,6 +251,7 @@ main(void) {
 	/* fill signal buffer with test data */
 	// add_triangle(signal, 110.0, 1.0);
 	// add_cos(signal, 400.0, 1.5);
+	add_cos(signal, 150.0, 1.0);
 	add_cos(signal, 300.0, 1.0);
 	// add_cos(signal, 600.0, 1.5);
 
@@ -311,7 +312,14 @@ main(void) {
 	}
 	lcd_flip(0);
 #else
-	bins = 512;
+	bins = 1024;
+
+/* resample at the bin rate */
+	clear_samples(signal);
+	reset_minmax(signal);
+	signal->r = 1024;
+	add_cos(signal, 150.0, 1.0);
+	add_cos(signal, 300.0, 1.0);
 
 	printf("Compute FFT\n");
 	t0 = mtime();
@@ -323,10 +331,10 @@ main(void) {
 	gfx_puts(g, "FFT");
 	vp = gfx_viewport(g, reticule.o_x, reticule.o_y + reticule.b_h/2, 
 						 reticule.b_w, reticule.b_h/2,
-			0, fft->sample_min, (float) bins, fft->sample_max);
+			0, fft->sample_min, (float) bins / 2, fft->sample_max);
 	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
-		0.0, fft->sample_min, (float)  bins, fft->sample_max / 2);
-	for (i = 1; i < bins; i++) {
+		0.0, fft->sample_min, (float)  bins / 2, fft->sample_max / 2);
+	for (i = 1; i < (bins / 2); i++) {
 		vp_plot(vp, i - 1, fft->data[i - 1], i, fft->data[i], GFX_COLOR_CYAN);
 	}
 	lcd_flip(0);

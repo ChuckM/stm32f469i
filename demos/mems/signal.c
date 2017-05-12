@@ -148,7 +148,8 @@ calc_dft(sample_buffer *s, float min_freq, float max_freq, int bins,
 		__fft_data[k] = 0;
 		mag->data[k] = 0;
 		/* correlate this frequency with each sample */
-		for (i = 0; i < s->n; i++) {
+//		for (i = 0; i < s->n; i++) { swapped out
+		for (i = 0; i < bins; i++) {
 			float r;
 			complex float sig;
 
@@ -173,8 +174,7 @@ calc_dft(sample_buffer *s, float min_freq, float max_freq, int bins,
 
 		
 		/* magnitude of the correlation */
-		mag->data[k] = sqrtf(crealf(__fft_data[k]) * crealf(__fft_data[k]) + 
-							 cimagf(__fft_data[k]) * cimagf(__fft_data[k]));
+		mag->data[k] = cabsf(__fft_data[k]);
 
 		/* track minimum and maximum */
 		set_minmax(mag, k);
@@ -279,21 +279,28 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 
 	q = (int) t;
 
-	memset(__fft_data, 0, sizeof(__fft_data));
+#ifdef DEBUG_FFT
 	printf("Bits per index is %d\n", q);
+#endif
 
 	/* This first bit is a reflection sort,
-	 * note that any index that is the same
-	 * LSB to MSB as MSB to LSB is not swapped.
-	 * We read out the signal and store it into
-	 * fft_data in bit reversal sort order.
+	 * Most people do a 'sort in place' of
+	 * the source data, but I'm trying to preserve
+	 * that original data for other use, so I
+	 * 'sort into place' from the source into
+	 * my temporary array __fft_data.
+	 * 
+	 * The end result is each entry is 2^n away
+	 * from its sibling. 
 	 */
 	for (i = 0; i < bins; i++) {
 		/* compute reflected index */
 		for (k = 0, j = 0; j < q; j++) {
 			k = (k << 1) | ((i >> j) & 1);
 		}
-		__fft_data[i] = sig->data[k] + 0 * I;
+		__fft_data[i] = sig->data[k];
+		//__fft_data[i] = sig->data[k * 2] + sig->data[k * 2 + 1] * I;
+		// __fft_data[i] = (sig->data[k * 2] + sig->data[k * 2 + 1]) / 2.0;
 	}
 
 	/* 
@@ -311,56 +318,94 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 		int half_bfly = bfly_len / 2;		/* Half-the butterfly */
 
 		/* nth root of K */
-		printf("Computing the roots of W(%d)\n", bfly_len);
-		/* unity root value (complex), nth instance of the Unity Root */
-		ur = 1.0;
-		/* unity root increment (complex) */
-		uri = cosf(M_PI / half_bfly) - sinf(M_PI / half_bfly) * I;
 #ifdef DEBUG_FFT
-		printf("Unity root increment is [%f, %fi]\n", crealf(uri), crealf(uri));
+		printf("Computing the roots of W(%d)\n", bfly_len);
 #endif
+
+		/* unity root value (complex) */
+		ur = 1.0;
+
+		/* This is the unity root increment (complex)
+		 * If you multiply ur by this value 'n' times then
+		 * ur will return to [1 + 0i]. 'n' in this case is
+		 * bfly_len times. Technically the argument to the
+		 * trancendentals would be 2 * pi / butterfly-span
+		 * but since we calculate butterfly-span / 2 (half_bfly)
+		 * we use algebra to simplify math to pi / half-bfly.
+		 */
+		uri = cosf(M_PI / half_bfly) - sinf(M_PI / half_bfly) * I;
 		
 		/*
-		 * Run the calculation for each root.
-		 * We run 0 to nr - 1, because we take
-		 * advantage of the symmetry, at bin 0
-		 * we have root n, and at bin 0 + nr we
-		 * root n + 180 degrees (aka (- root n))
-		 * We apply both and do half number of
-		 * multiplies, win!
+		 * Combine two 2^i DFTs into a single
+		 * 2^(i+1) DFT. So two 1 bin DFTs to
+		 * a 2 bin DFT, two 2 bin DFTs to a 4
+		 * bin DFT, etc. The number of times
+		 * we convert is a function of how many
+		 * 2^(i+1) bin DFTs are in the total
+		 * number of bins. So for 512 bins (example)
+		 * there are two hundred and fifty six  2-bin DFTs,
+		 * one hundred and twenty eight 4-bin DFTs, all
+		 * the way up to exactly one 512-bin DFT.
 		 */
 		for (j = 0; j < half_bfly ; j++) {
-			/* run the calculation across all bins */
-//			printf(" Apply '%d'th root of %d, to [%d] and [%d] %d times\n", j, bfly_len,
-//					j, j + half_bfly, bins/bfly_len);
 			for (k = j; k < bins; k += bfly_len) {
 				/*
 				 * Apply the FFT butterfly function to
 			 	 * P[n], P[n + half_bfly]
-				 * step 1, multiply our unity root by P[n + half_bfly]
+				 *
+				 * Alpha is the 180 degrees out point multiplied by
+				 * the current unit root.
 				 */
+	
 				alpha = __fft_data[k + half_bfly] * ur;
-
 				/*
+				 * Mathematically P[n + half_bfly] is 180 degrees
+				 * 'further' than P[n]. So changing the sign on
+				 * alpha (1 + 0i) => (-1 - 0i) is the equivalent
+				 * value of alpha for that point in the transform.
+				 *
 				 * step 2, P[n]             = P[n] + alpha
 				 *         P[n + half_bfly] = P[n] - alpha
+				 *
+				 * Sequence is important here, set P[n + h]
+				 * before you change the value of P[n].
 				 */
-				__fft_data[k] = __fft_data[k] + alpha; 
 				__fft_data[k + half_bfly] = __fft_data[k] - alpha;
+				__fft_data[k] += alpha; 
+				/*
+				 * and that is it, except for scaling perhaps, if you want
+				 * to (or need to) keep the bins within the precision
+				 * of their numeric representation.
+				 */
 			}
-			/* advance to the next fraction of the unity root */
+			/*
+			 * Now my multiplying UR by URI we save ourselves from recomputing the
+			 * sin and cos, Euler tells us we can just keep multiplying and the values
+			 * will go through a sequence from 1 + 0, to 1 - i, to -1 + 0, to 1 + i and
+			 * then back to 1 + 0.
+			 */
 			ur = ur * uri;
+
 #ifdef DEBUG_FFT
 			printf("    ... Increment UR to [%f, %f]\r", crealf(ur), cimagf(ur));
 #endif
 		}
+#ifdef DEBUG_FFT
 		printf("\n");
+#endif
 	}
+#ifdef DEBUG_FFT
 	printf("\nDone.\n");
+#endif
 
+	/*
+	 * Final step for us, we now have a set of complex values describing the spectrum
+	 * but what we want are the magnitude. So we go back through the computed spectra
+	 * and using the root of two squares we compute the magnitude of each point in
+	 * the transform.
+	 */
 	for (i = 0; i < bins; i++) {
-		mag->data[i] = sqrtf(crealf(__fft_data[i]) * crealf(__fft_data[i]) +
-							 cimagf(__fft_data[i]) * cimagf(__fft_data[i]));
+		mag->data[i] = cabsf(__fft_data[i]);
 		set_minmax(mag, i);
 	}
 }
