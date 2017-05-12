@@ -354,6 +354,7 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 			printf("    ... Increment UR to [%f, %f]\r", crealf(ur), cimagf(ur));
 #endif
 		}
+		printf("\n");
 	}
 	printf("\nDone.\n");
 
