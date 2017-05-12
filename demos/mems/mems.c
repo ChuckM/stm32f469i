@@ -221,14 +221,20 @@ main(void) {
 	float data_min, data_max;
 #endif
 	char *test_buffer;
-	sample_buffer *signal, *re_x, *im_x, *fft;
+	sample_buffer *signal, *fft, *mag0;
+#ifdef TEST_DFT
+	sample_buffer *re_x, *im_x;
+#endif
 	GFX_CTX	*g;
 	GFX_VIEW *vp;
 
 	signal = alloc_buf(1024);
 	signal->r = 8192;
+#ifdef TEST_DFT
 	re_x = alloc_buf(1024);
 	im_x = alloc_buf(1024);
+#endif
+	mag0 = alloc_buf(1024);
 	fft = alloc_buf(1024);
 
 	/* Enable the clock to the DMA2D device */
@@ -245,7 +251,7 @@ main(void) {
 	/* fill signal buffer with test data */
 	// add_triangle(signal, 110.0, 1.0);
 	// add_cos(signal, 400.0, 1.5);
-	add_cos(signal, 500.0, 1.0);
+	add_cos(signal, 300.0, 1.0);
 	// add_cos(signal, 600.0, 1.5);
 
 
@@ -267,47 +273,63 @@ main(void) {
 	 * components.
 	 */
 
-	bins = reticule.b_w; /* scaled to size of reticule */
+	bins = 512;
 	t0 = mtime();
-	calc_dft(signal, 50.0, 750.0, bins, re_x, im_x, fft);	/* compute DFT per article */
+	calc_dft(signal, 0.0, 512.0, bins, mag0);
 	t1 = mtime();
 	printf("DFT Compute time %ld milliseconds\n", t1 - t0);
 
-#ifdef PLOT_RAW
-	data_min = min(re_x->sample_min, im_x->sample_min);
-	data_max = max(re_x->sample_max , im_x->sample_max);
-	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
-			0, data_min, (float) bins, data_max);
-	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
-		0.0, data_min, (double) bins, data_max);
-	for (i = 1; i < bins; i++) {
-		vp_plot(vp, i - 1, re_x->data[i - 1], i, re_x->data[i], GFX_COLOR_MAGENTA);
-		vp_plot(vp, i - 1, im_x->data[i -1], i, im_x->data[i], GFX_COLOR_CYAN);
-	}
-#endif
-
+	gfx_set_text_size(g, 2);
+	gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_YELLOW);
+	gfx_set_text_cursor(g, reticule.o_x + 5, reticule.o_y+15 + gfx_get_text_height(g));
+	gfx_puts(g, "DFT");
 	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h/2,
-			0, fft->sample_min, (float) bins, fft->sample_max);
+			0, mag0->sample_min, (float) bins, mag0->sample_max);
 	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
-		0.0, fft->sample_min, (float)  bins, fft->sample_max);
+		0.0, mag0->sample_min, (float)  bins, mag0->sample_max);
 	for (i = 1; i < bins; i++) {
-		vp_plot(vp, i - 1, fft->data[i - 1], i, fft->data[i], GFX_COLOR_YELLOW);
+		vp_plot(vp, i - 1, mag0->data[i - 1], i, mag0->data[i], GFX_COLOR_YELLOW);
 	}
 	lcd_flip(0);
+
+#ifdef TEST_DFT
+	bins = 512;
+	t0 = mtime();
+	calc_test_dft(signal, 0.0, 512.0, bins, re_x, im_x, mag0);	/* compute DFT per article */
+	t1 = mtime();
+	printf("DFT 1. Compute time %ld milliseconds\n", t1 - t0);
+
+	gfx_set_text_color(g, GFX_COLOR_CYAN, GFX_COLOR_CYAN);
+	gfx_set_text_cursor(g, reticule.o_x+5, reticule.o_y+15 + reticule.b_h/2 + gfx_get_text_height(g));
+	gfx_puts(g, "DFT 1");
+	vp = gfx_viewport(g, reticule.o_x, reticule.o_y + reticule.b_h/2, reticule.b_w, reticule.b_h/2,
+			0, mag0->sample_min, (float) bins, mag0->sample_max);
+	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
+		0.0, mag0->sample_min, (float)  bins, mag0->sample_max);
+	for (i = 1; i < bins; i++) {
+		vp_plot(vp, i - 1, mag0->data[i - 1], i, mag0->data[i], GFX_COLOR_CYAN);
+	}
+	lcd_flip(0);
+#else
+	bins = 512;
 
 	printf("Compute FFT\n");
 	t0 = mtime();
-	calc_fft(signal, 1024, fft);
+	calc_fft(signal, bins, fft);
 	t1 = mtime();
 	printf("Computed FFT in %ld milliseconds\n", t1 - t0);
+	gfx_set_text_color(g, GFX_COLOR_CYAN, GFX_COLOR_CYAN);
+	gfx_set_text_cursor(g, reticule.o_x+5, reticule.o_y+15 + reticule.b_h/2 + gfx_get_text_height(g));
+	gfx_puts(g, "FFT");
 	vp = gfx_viewport(g, reticule.o_x, reticule.o_y + reticule.b_h/2, 
 						 reticule.b_w, reticule.b_h/2,
-			0, fft->sample_min, (float) fft->n, fft->sample_max);
+			0, fft->sample_min, (float) bins, fft->sample_max);
 	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
-		0.0, fft->sample_min, (float)  fft->n, fft->sample_max);
-	for (i = 1; i < fft->n; i++) {
+		0.0, fft->sample_min, (float)  bins, fft->sample_max / 2);
+	for (i = 1; i < bins; i++) {
 		vp_plot(vp, i - 1, fft->data[i - 1], i, fft->data[i], GFX_COLOR_CYAN);
 	}
 	lcd_flip(0);
+#endif
 	while (1) ;
 }

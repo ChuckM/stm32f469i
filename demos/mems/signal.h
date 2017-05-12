@@ -36,6 +36,8 @@ void add_cos(sample_buffer *, float, float);
 void add_triangle(sample_buffer *, float, float);
 void add_square(sample_buffer *, float, float);
 void calc_dft(sample_buffer *s, float min_freq, float max_freq, int bins, 
+	sample_buffer *mag);
+void calc_test_dft(sample_buffer *s, float min_freq, float max_freq, int bins, 
 	sample_buffer *rx, sample_buffer *im, sample_buffer *mag);
 void calc_fft(sample_buffer *s, int bins, sample_buffer *mag);
 

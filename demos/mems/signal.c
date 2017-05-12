@@ -114,17 +114,87 @@ add_square(sample_buffer *s, float f, float a)
 		set_minmax(s, i);
 	}
 }
+#define DEBUG_FFT
+
+#define MAX_FFT_BINS	1024
+/* FFT data buffer */
+complex float __fft_data[MAX_FFT_BINS];
 
 /* 
  * dft( ... )
  *
  * Compute the Discrete Fourier Transform using the
- * correlation method. This out of DSP for engineers and scientists 
+ * correlation method. Version zero does the computation with
+ * complex arithmetic explicitly, version one does the computation
+ * with nominal values.
  * NOTE: It takes n^2 time to compute so above about 32 bins it
  * really does take a long time.
  */
 void
 calc_dft(sample_buffer *s, float min_freq, float max_freq, int bins, 
+	sample_buffer *mag)
+{
+	complex float t;
+	int	i, k;
+
+	/* run through each bin */
+	mag->sample_max = mag->sample_min = 0;
+	for (k = 0; k < bins; k++) {
+		float current_freq;
+
+		/* current frequency based on bin # and frequency span */
+		current_freq = min_freq + k * (max_freq - min_freq) / (float) bins;
+
+		__fft_data[k] = 0;
+		mag->data[k] = 0;
+		/* correlate this frequency with each sample */
+		for (i = 0; i < s->n; i++) {
+			float r;
+			complex float sig;
+
+			/* compute correlation, r is radians 
+			 * 2pi is 'radians/cycle'
+			 * current_freq is 'cycles/second'
+			 * i is 'sample'
+			 * s->r is 'sample(s)/second'
+			 *
+			 *       radians   cycles    sample   seconds
+			 * r =   ------- * ------- * ------ * -------
+ 			 *        cycle    seconds     1      samples
+			 *
+			 * note that cycle cancels cycles, sample cancels samples, and
+			 * seconds cancels seconds leaving you with just radians.
+			 */
+			r = 2 * M_PI * current_freq * i / s->r;
+			t = cosf(r) - sinf(r) * I;
+			sig =  s->data[i];
+			__fft_data[k] = __fft_data[k] + (t * sig);
+		}
+
+		
+		/* magnitude of the correlation */
+		mag->data[k] = sqrtf(crealf(__fft_data[k]) * crealf(__fft_data[k]) + 
+							 cimagf(__fft_data[k]) * cimagf(__fft_data[k]));
+
+		/* track minimum and maximum */
+		set_minmax(mag, k);
+
+	}
+
+}
+
+/* 
+ * test_dft( ... )
+ *
+ * Compute the Discrete Fourier Transform using the
+ * correlation method and trancendental functions. I was not sure
+ * if the C99 support for complex floats was part of gcc-arm-embedded
+ * but by comparing this version to the complex float version (calc_dft)
+ * we can show they produce identical results.
+ *
+ */
+void
+calc_test_dft(sample_buffer *s, float min_freq, float max_freq, int bins, 
 	sample_buffer *rx, sample_buffer *im, sample_buffer *mag)
 {
 	int	i, k;
@@ -182,18 +252,6 @@ calc_dft(sample_buffer *s, float min_freq, float max_freq, int bins,
 
 }
 
-#define DEBUG_FFT
-
-#define MAX_FFT_BINS	1024
-/* FFT data buffer */
-complex float __fft_data[MAX_FFT_BINS];
-#ifdef DEBUG_FFT
-uint16_t	indices[MAX_FFT_BINS];
-#endif
-
-/* compute the magnitude of the complex phasor */
-#define MAGNITUDE(C)	sqrtf(creal((C)) * creal((C)) + cimag((C)) * cimag((C)))
-
 /*
  * fft( ... )
  *
@@ -209,7 +267,6 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 	int q;
 	float t;
 	complex float alpha, uri, ur;
-	uint16_t	t16;
 
 	/* and they must be a power of 2 */
 	t = log(bins) / log(2);
@@ -219,47 +276,24 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 	if (bins > MAX_FFT_BINS) {
 		return;
 	}
-	/* signal with zero imaginary component */
-	for (i = 0; i < bins; i++) {
-		__fft_data[i] = sig->data[i];
-#ifdef DEBUG_FFT
-		indices[i] = i;
-#endif
-	}
 
 	q = (int) t;
 
+	memset(__fft_data, 0, sizeof(__fft_data));
 	printf("Bits per index is %d\n", q);
+
 	/* This first bit is a reflection sort,
 	 * note that any index that is the same
 	 * LSB to MSB as MSB to LSB is not swapped.
-	 * we know 0 and n-1 will be symmetric so we
-	 * don't even look at them.
+	 * We read out the signal and store it into
+	 * fft_data in bit reversal sort order.
 	 */
-	for (i = 1; i < (bins - 1); i++) {
+	for (i = 0; i < bins; i++) {
 		/* compute reflected index */
 		for (k = 0, j = 0; j < q; j++) {
 			k = (k << 1) | ((i >> j) & 1);
 		}
-		/*
-		 * Only swap lower value for higher value this
-	 	 * way we avoid swapping things twice when when
-		 * come across the higher index.
-		 */
-		if (k > i) {
-			complex float tmp;
-#ifdef DEBUG_FFT
-
-			
-			t16 = indices[i];
-			indices[i] = indices[k];
-			indices[k] = t16;
-#endif
-			/* swap values */
-			tmp = __fft_data[i];
-			__fft_data[i] = __fft_data[k];
-			__fft_data[k] = tmp;
-		}
+		__fft_data[i] = sig->data[k] + 0 * I;
 	}
 
 	/* 
@@ -270,23 +304,21 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 	 */
 #ifdef DEBUG_FFT
 	printf("FFT Calc: %d stage bufferfly calculation\n", q);
-	printf("Reverse Sort: [");
-	for (i = 0; i < bins; i++) {
-		printf("%d, ", indices[i]);
-	}
-	printf("]\n");
 #endif
 
-	for (i = 1; i < q; i++) {
-		int bfly_len = 2 << i;			/* Butterfly elements */
-		int half_bfly = 2 << (i-1);		/* Half-the butterfly */
+	for (i = 1; i <= q; i++) {
+		int bfly_len = 1 << i;			/* Butterfly elements */
+		int half_bfly = bfly_len / 2;		/* Half-the butterfly */
 
 		/* nth root of K */
 		printf("Computing the roots of W(%d)\n", bfly_len);
 		/* unity root value (complex), nth instance of the Unity Root */
 		ur = 1.0;
 		/* unity root increment (complex) */
-		uri = cosf(2 * M_PI / bfly_len) - sinf(2 * M_PI / bfly_len) * I;
+		uri = cosf(M_PI / half_bfly) - sinf(M_PI / half_bfly) * I;
+#ifdef DEBUG_FFT
+		printf("Unity root increment is [%f, %fi]\n", crealf(uri), crealf(uri));
+#endif
 		
 		/*
 		 * Run the calculation for each root.
@@ -305,33 +337,29 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 				/*
 				 * Apply the FFT butterfly function to
 			 	 * P[n], P[n + half_bfly]
-				 * step 1, multiply our unity root by p[n + half_bfly]
+				 * step 1, multiply our unity root by P[n + half_bfly]
 				 */
 				alpha = __fft_data[k + half_bfly] * ur;
 
-				/* now we sum it to P[k], and subtract it from P[k + nr] */
-				__fft_data[k] += alpha; 
-				__fft_data[k + half_bfly] -= alpha;
-#ifdef DEBUG_FFT
-				t16 = indices[k];
-				indices[k] = indices[k + half_bfly];
-				indices[k + half_bfly] = t16;
-#endif
+				/*
+				 * step 2, P[n]             = P[n] + alpha
+				 *         P[n + half_bfly] = P[n] - alpha
+				 */
+				__fft_data[k] = __fft_data[k] + alpha; 
+				__fft_data[k + half_bfly] = __fft_data[k] - alpha;
 			}
 			/* advance to the next fraction of the unity root */
 			ur = ur * uri;
+#ifdef DEBUG_FFT
+			printf("    ... Increment UR to [%f, %f]\r", crealf(ur), cimagf(ur));
+#endif
 		}
 	}
-#ifdef DEBUG_FFT
-	printf("FFT Calc: post %d stage bufferfly calculation\n", q);
-	printf("Reverse Sort: [");
+	printf("\nDone.\n");
+
 	for (i = 0; i < bins; i++) {
-		printf("%d, ", indices[i]);
-	}
-	printf("]\n");
-#endif
-	for (i = 0; i < bins; i++) {
-		mag->data[i] = MAGNITUDE(__fft_data[i]);
+		mag->data[i] = sqrtf(crealf(__fft_data[i]) * crealf(__fft_data[i]) +
+							 cimagf(__fft_data[i]) * cimagf(__fft_data[i]));
 		set_minmax(mag, i);
 	}
 }
