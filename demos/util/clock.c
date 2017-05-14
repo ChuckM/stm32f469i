@@ -29,7 +29,7 @@
 #include <libopencm3/cm3/systick.h>
 
 /* Common function descriptions */
-#include "../util/clock.h"
+#include "../util/util.h"
 
 void term_draw_cursor(int);
 

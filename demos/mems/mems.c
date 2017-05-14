@@ -17,7 +17,6 @@
 
 #include "../util/util.h"
 #include "signal.h"
-#include "dma2d.h"
 
 /*
  * MEMS Setup

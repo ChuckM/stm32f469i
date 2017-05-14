@@ -12,7 +12,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <libopencm3/stm32/dma2d.h>
-#include "dma2d.h"
+#include "../util/util.h"
 
 /*
  * dma2d_draw_4bpp -- Write nyblets into the framebuffer
