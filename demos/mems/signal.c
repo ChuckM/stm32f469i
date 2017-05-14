@@ -54,7 +54,7 @@ free_buf(sample_buffer *sb)
  * add_cos( ... )
  *
  * Add in a signal at this frequency and amplitude into
- * the sample buffer. 
+ * the sample buffer.
  */
 void
 add_cos(sample_buffer *s, float f, float a)
@@ -89,7 +89,7 @@ add_triangle(sample_buffer *s, float f, float a)
 	float t;
 
 	for (i = 0; i < s->n; i++) {
-		s->data[i] += (sample_t) 
+		s->data[i] += (sample_t)
 			((a * modff(f * (float) i / (float) s->r, &t)) - level);
 		set_minmax(s, i);
 	}
@@ -109,30 +109,28 @@ add_square(sample_buffer *s, float f, float a)
 	float t;
 
 	for (i = 0; i < s->n; i++) {
-		s->data[i] += (sample_t) 
+		s->data[i] += (sample_t)
 			((modff(f * (float) i / (float) s->r, &t) >= .5) ? level : -level);
 		set_minmax(s, i);
 	}
 }
-#define DEBUG_FFT
+// #define DEBUG_FFT
 
 #define MAX_FFT_BINS	1024
 /* FFT data buffer */
 complex float __fft_data[MAX_FFT_BINS];
 
-/* 
+/*
  * dft( ... )
  *
  * Compute the Discrete Fourier Transform using the
- * correlation method. Version zero does the computation with
- * complex arithmetic explicitly, version one does the computation
- * with nominal values.
+ * correlation method. 
+ *
  * NOTE: It takes n^2 time to compute so above about 32 bins it
  * really does take a long time.
  */
 void
-calc_dft(sample_buffer *s, float min_freq, float max_freq, int bins, 
-	sample_buffer *mag)
+calc_dft(sample_buffer *s, int bins, sample_buffer *mag)
 {
 	complex float t;
 	int	i, k;
@@ -143,122 +141,42 @@ calc_dft(sample_buffer *s, float min_freq, float max_freq, int bins,
 		float current_freq;
 
 		/* current frequency based on bin # and frequency span */
-		current_freq = min_freq + k * (max_freq - min_freq) / (float) bins;
+		current_freq = 2 * M_PI * k / (float) bins;
 
 		__fft_data[k] = 0;
 		mag->data[k] = 0;
 		/* correlate this frequency with each sample */
-//		for (i = 0; i < s->n; i++) { swapped out
-		for (i = 0; i < bins; i++) {
+		for (i = 0; i < s->n; i++) {
 			float r;
 			complex float sig;
-
-			/* compute correlation, r is radians 
-			 * 2pi is 'radians/cycle'
-			 * current_freq is 'cycles/second'
-			 * i is 'sample'
-			 * s->r is 'sample(s)/second'
-			 *
-			 *       radians   cycles    sample   seconds
-			 * r =   ------- * ------- * ------ * -------
- 			 *        cycle    seconds     1      samples
-			 *
-			 * note that cycle cancels cycles, sample cancels samples, and
-			 * seconds cancels seconds leaving you with just radians.
+			/*
+			 * Compute correlation:
+			 *	r is what the radians value at the current sample
+			 *    this is 'wt' where 'i' is representing t
+			 *  t then is e^-jwt
+			 *  and t * sample_value is the correlation.
 			 */
-			r = 2 * M_PI * current_freq * i / s->r;
+			r = current_freq * i;
 			t = cosf(r) - sinf(r) * I;
 			sig =  s->data[i];
 			__fft_data[k] = __fft_data[k] + (t * sig);
 		}
 
-		
 		/* magnitude of the correlation */
 		mag->data[k] = cabsf(__fft_data[k]);
 
 		/* track minimum and maximum */
 		set_minmax(mag, k);
-
 	}
-
-}
-
-/* 
- * test_dft( ... )
- *
- * Compute the Discrete Fourier Transform using the
- * correlation method and trancendental functions. I was not sure
- * if the C99 support for complex floats was part of gcc-arm-embedded
- * but by comparing this version to the complex float version (calc_dft)
- * we can show they produce identical results.
- *
- */
-void
-calc_test_dft(sample_buffer *s, float min_freq, float max_freq, int bins, 
-	sample_buffer *rx, sample_buffer *im, sample_buffer *mag)
-{
-	int	i, k;
-
-	/* run through each bin */
-	reset_minmax(rx); 
-	reset_minmax(im);
-	mag->sample_max = mag->sample_min = 0;
-	for (k = 0; k < bins; k++) {
-		float current_freq;
-
-		/* don't overwrite random memory, so check array bound */
-		if ((k >= rx->n) || (k >= im->n) || (k >= mag->n)) {
-			break;
-		}
-		/* current frequency based on bin # and frequency span */
-		current_freq = min_freq + k * (max_freq - min_freq) / (float) bins;
-
-		rx->data[k] = 0;
-		im->data[k] = 0;
-		mag->data[k] = 0;
-		/* correlate this frequency with each sample */
-		for (i = 0; i < s->n; i++) {
-			float r;
-
-			/* compute correlation, r is radians 
-			 * 2pi is 'radians/cycle'
-			 * current_freq is 'cycles/second'
-			 * i is 'sample'
-			 * s->r is 'sample(s)/second'
-			 *
-			 *       radians   cycles    sample   seconds
-			 * r =   ------- * ------- * ------ * -------
- 			 *        cycle    seconds     1      samples
-			 *
-			 * note that cycle cancels cycles, sample cancels samples, and
-			 * seconds cancels seconds leaving you with just radians.
-			 */
-			r = 2 * M_PI * current_freq * i / s->r;
-			rx->data[k] = rx->data[k] + s->data[i] * cosf(r);
-			im->data[k] = im->data[k] + (- s->data[i] * sinf(r));
-		}
-
-		
-		/* magnitude of the correlation */
-		mag->data[k] = 
-				sqrt(rx->data[k] * rx->data[k] + im->data[k] * im->data[k]);
-
-		/* track minimum and maximum */
-		set_minmax(rx, k);
-		set_minmax(im, k);
-		set_minmax(mag, k);
-
-	}
-
 }
 
 /*
  * fft( ... )
  *
- * Given the set of complex points P represented
- * by the two vectors re->data[P], im->data[P], compute
- * the fast fourier transform in place. The length of
- * re and im must be equal and a power of 2.
+ * Compute the spectrum using the FFT algorithm. This is
+ * very much faster than the DFT version. It requires that
+ * the sample buffer be a power of 2. So 256, 512, 1024,
+ * etc.
  */
 void
 calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
@@ -289,9 +207,9 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 	 * that original data for other use, so I
 	 * 'sort into place' from the source into
 	 * my temporary array __fft_data.
-	 * 
+	 *
 	 * The end result is each entry is 2^n away
-	 * from its sibling. 
+	 * from its sibling.
 	 */
 	for (i = 0; i < bins; i++) {
 		/* compute reflected index */
@@ -299,11 +217,9 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 			k = (k << 1) | ((i >> j) & 1);
 		}
 		__fft_data[i] = sig->data[k];
-		//__fft_data[i] = sig->data[k * 2] + sig->data[k * 2 + 1] * I;
-		// __fft_data[i] = (sig->data[k * 2] + sig->data[k * 2 + 1]) / 2.0;
 	}
 
-	/* 
+	/*
 	 * now synthesize the frequency domain, 1 thru n
 	 * frequency domain 0 is easy, its just the value
 	 * in the bin because a 1 bin DFT is the spectrum
@@ -371,7 +287,7 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 				 * before you change the value of P[n].
 				 */
 				__fft_data[k + half_bfly] = __fft_data[k] - alpha;
-				__fft_data[k] += alpha; 
+				__fft_data[k] += alpha;
 				/*
 				 * and that is it, except for scaling perhaps, if you want
 				 * to (or need to) keep the bins within the precision
@@ -379,9 +295,10 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 				 */
 			}
 			/*
-			 * Now my multiplying UR by URI we save ourselves from recomputing the
-			 * sin and cos, Euler tells us we can just keep multiplying and the values
-			 * will go through a sequence from 1 + 0, to 1 - i, to -1 + 0, to 1 + i and
+			 * Now my multiplying UR by URI we save ourselves from
+			 * recomputing the sin and cos, Euler tells us we can just
+			 * keep multiplying and the values will go through a 
+			 * sequence from 1 + 0, to 1 - i, to -1 + 0, to 1 + i and
 			 * then back to 1 + 0.
 			 */
 			ur = ur * uri;
@@ -399,10 +316,11 @@ calc_fft(sample_buffer *sig, int bins, sample_buffer *mag)
 #endif
 
 	/*
-	 * Final step for us, we now have a set of complex values describing the spectrum
-	 * but what we want are the magnitude. So we go back through the computed spectra
-	 * and using the root of two squares we compute the magnitude of each point in
-	 * the transform.
+	 * Final step for us, we now have a set of complex values describing 
+	 * the spectrum but what we want are the magnitude. So we go back 
+	 * through the computed spectra and using the complex version of the
+	 * absolute value function we convert the complex values into magnitude
+	 * values.
 	 */
 	for (i = 0; i < bins; i++) {
 		mag->data[i] = cabsf(__fft_data[i]);

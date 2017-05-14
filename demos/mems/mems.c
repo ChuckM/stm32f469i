@@ -204,6 +204,15 @@ create_reticule(void)
 #define SAMP_SIZE	1024
 #define	SAMP_RATE	8192
 
+void printvp(GFX_VIEW *vp);
+
+void
+printvp(GFX_VIEW *vp)
+{
+	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
+				vp->min_x, vp->min_y, vp->max_x, vp->max_y);
+}
+
 /*
  * Lets see if we can look at MEMs microphones
  * Mems microphone comes in on
@@ -217,33 +226,21 @@ int
 main(void) {
 	int i, bins;
 	uint32_t t0, t1;
-#ifdef PLOT_RAW
-	float data_min, data_max;
-#endif
-	char *test_buffer;
+	double max_epsilon, avg_epsilon;
 	sample_buffer *signal, *fft, *mag0;
-#ifdef TEST_DFT
-	sample_buffer *re_x, *im_x;
-#endif
 	GFX_CTX	*g;
 	GFX_VIEW *vp;
 
 	signal = alloc_buf(1024);
-	signal->r = 8192;
-#ifdef TEST_DFT
-	re_x = alloc_buf(1024);
-	im_x = alloc_buf(1024);
-#endif
 	mag0 = alloc_buf(1024);
 	fft = alloc_buf(1024);
 
 	/* Enable the clock to the DMA2D device */
 	rcc_periph_clock_enable(RCC_DMA2D);
-	fprintf(stderr, "FFT Exploration Demo program V2.0\n");
-	test_buffer = malloc(2048);
-	printf("Test buffer allocated, got address @0x%0x\n", (unsigned int)(test_buffer));
+	fprintf(stderr, "FFT Exploration Demo program V2.2\n");
 
-	g = gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAMEBUFFER_ADDRESS);
+	g = gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE,
+										(void *)FRAMEBUFFER_ADDRESS);
 	dma2d_clear(&screen, DMA2D_GREY);
 	(void) create_reticule();
 	dma2d_render((DMA2D_BITMAP *)&reticule, &screen, 0, 0);
@@ -251,75 +248,68 @@ main(void) {
 	/* fill signal buffer with test data */
 	// add_triangle(signal, 110.0, 1.0);
 	// add_cos(signal, 400.0, 1.5);
+/*
+	high res wave
+	box-w (number of increments)
+	150hz is our slowest wave
+	1/150 is one cycle, times 2*pi, divided by number of bits
+ */
+	signal->r = (150 * reticule.b_w) / (2 * M_PI) ;
+	add_cos(signal, 150.0, 1.0);
+	add_cos(signal, 300.0, 1.0);
+	// add_cos(signal, 600.0, 1.5);
+
+	/*
+	 * show our original signal
+	 */
+#define ONE_WAVE reticule.b_w
+	
+	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
+			0, signal->sample_min, ONE_WAVE, signal->sample_max);
+	for (i = 1; i < ONE_WAVE; i++) {
+		vp_plot(vp, i - 1, *(signal->data + (i -1)),
+					    i, *(signal->data + i), COLOR_DARKGREEN);
+	}
+	lcd_flip(0);
+
+	/* fill signal buffer with test data */
+	// add_triangle(signal, 110.0, 1.0);
+	// add_cos(signal, 400.0, 1.5);
+	clear_samples(signal);
+	signal->r = 512;
 	add_cos(signal, 150.0, 1.0);
 	add_cos(signal, 300.0, 1.0);
 	// add_cos(signal, 600.0, 1.5);
 
 
-	/*
-	 * show our original signal
-	 */
-	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h,
-			0, signal->sample_min, (float) signal->n, signal->sample_max);
-	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
-				0.0, signal->sample_min, (double) signal->n, signal->sample_max);
-	for (i = 1; i < signal->n; i++) {
-		vp_plot(vp, i - 1, *(signal->data + (i -1)),
-					    i, *(signal->data + i), COLOR_DARKGREEN);
-	}
-	lcd_flip(0);
 
 	/*
 	 * Apply the DFT and compute real and imaginary
 	 * components.
 	 */
 
-	bins = 512;
+	bins = 1024;
 	t0 = mtime();
-	calc_dft(signal, 0.0, 512.0, bins, mag0);
+	calc_dft(signal, bins, mag0);
 	t1 = mtime();
 	printf("DFT Compute time %ld milliseconds\n", t1 - t0);
 
+	/* Need a better way to 'label' these viewports */
 	gfx_set_text_size(g, 2);
 	gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_YELLOW);
-	gfx_set_text_cursor(g, reticule.o_x + 5, reticule.o_y+15 + gfx_get_text_height(g));
+	gfx_set_text_cursor(g, reticule.o_x + 5,
+						   reticule.o_y+15 + gfx_get_text_height(g));
 	gfx_puts(g, "DFT");
-	vp = gfx_viewport(g, reticule.o_x, reticule.o_y, reticule.b_w, reticule.b_h/2,
-			0, mag0->sample_min, (float) bins, mag0->sample_max);
-	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
-		0.0, mag0->sample_min, (float)  bins, mag0->sample_max);
+
+	vp = gfx_viewport(g, reticule.o_x, reticule.o_y,
+						 reticule.b_w, reticule.b_h/2,
+						 0, mag0->sample_min, (float) bins, mag0->sample_max);
+	printvp(vp);
 	for (i = 1; i < bins; i++) {
-		vp_plot(vp, i - 1, mag0->data[i - 1], i, mag0->data[i], GFX_COLOR_YELLOW);
+		vp_plot(vp, i - 1, mag0->data[i - 1],
+				    i, mag0->data[i], GFX_COLOR_YELLOW);
 	}
 	lcd_flip(0);
-
-#ifdef TEST_DFT
-	bins = 512;
-	t0 = mtime();
-	calc_test_dft(signal, 0.0, 512.0, bins, re_x, im_x, mag0);	/* compute DFT per article */
-	t1 = mtime();
-	printf("DFT 1. Compute time %ld milliseconds\n", t1 - t0);
-
-	gfx_set_text_color(g, GFX_COLOR_CYAN, GFX_COLOR_CYAN);
-	gfx_set_text_cursor(g, reticule.o_x+5, reticule.o_y+15 + reticule.b_h/2 + gfx_get_text_height(g));
-	gfx_puts(g, "DFT 1");
-	vp = gfx_viewport(g, reticule.o_x, reticule.o_y + reticule.b_h/2, reticule.b_w, reticule.b_h/2,
-			0, mag0->sample_min, (float) bins, mag0->sample_max);
-	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
-		0.0, mag0->sample_min, (float)  bins, mag0->sample_max);
-	for (i = 1; i < bins; i++) {
-		vp_plot(vp, i - 1, mag0->data[i - 1], i, mag0->data[i], GFX_COLOR_CYAN);
-	}
-	lcd_flip(0);
-#else
-	bins = 1024;
-
-/* resample at the bin rate */
-	clear_samples(signal);
-	reset_minmax(signal);
-	signal->r = 1024;
-	add_cos(signal, 150.0, 1.0);
-	add_cos(signal, 300.0, 1.0);
 
 	printf("Compute FFT\n");
 	t0 = mtime();
@@ -327,17 +317,26 @@ main(void) {
 	t1 = mtime();
 	printf("Computed FFT in %ld milliseconds\n", t1 - t0);
 	gfx_set_text_color(g, GFX_COLOR_CYAN, GFX_COLOR_CYAN);
-	gfx_set_text_cursor(g, reticule.o_x+5, reticule.o_y+15 + reticule.b_h/2 + gfx_get_text_height(g));
+	gfx_set_text_cursor(g, reticule.o_x + 5,
+						   reticule.o_y + 15 + reticule.b_h / 2 + gfx_get_text_height(g));
 	gfx_puts(g, "FFT");
 	vp = gfx_viewport(g, reticule.o_x, reticule.o_y + reticule.b_h/2, 
 						 reticule.b_w, reticule.b_h/2,
-			0, fft->sample_min, (float) bins / 2, fft->sample_max);
-	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
-		0.0, fft->sample_min, (float)  bins / 2, fft->sample_max / 2);
-	for (i = 1; i < (bins / 2); i++) {
+						 0, fft->sample_min, (float) bins, fft->sample_max);
+	printvp(vp);
+	for (i = 1; i < bins; i++) {
 		vp_plot(vp, i - 1, fft->data[i - 1], i, fft->data[i], GFX_COLOR_CYAN);
 	}
 	lcd_flip(0);
-#endif
+	max_epsilon = avg_epsilon = 0;
+	for (int j = 0; j < bins; j++) {
+		double td;
+		td = abs(mag0->data[j] - fft->data[j]);
+		max_epsilon = max(td, max_epsilon);
+		avg_epsilon += td;
+	}
+	avg_epsilon /= (double) bins;
+	printf("Differences, max epsilon = %f, average %f\n",
+		max_epsilon, avg_epsilon);
 	while (1) ;
 }
