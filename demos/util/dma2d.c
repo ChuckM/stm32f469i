@@ -15,6 +15,20 @@
 #include "../util/util.h"
 
 /*
+ * This is the DMA2D Bitmap representing the LCD Screen.
+ */
+DMA2D_BITMAP lcd_screen = {
+	.buf = (void *)(FRAMEBUFFER_ADDRESS),
+	.mode = DMA2D_ARGB8888,
+	.w = 800,
+	.h = 480,
+	.stride = 800 * 4,
+	.fg = DMA2D_WHITE,
+	.bg = DMA2D_BLACK,
+	.clut = NULL
+};
+
+/*
  * dma2d_draw_4bpp -- Write nyblets into the framebuffer
  */
 void
