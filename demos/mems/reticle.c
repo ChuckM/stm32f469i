@@ -38,8 +38,6 @@ DMA2D_COLOR ret_colors[] = {
 #define DARK_GRID	COLOR(0, 6, 0)
 
 #define RCOLOR(c)	(GFX_COLOR){.raw=(uint32_t) c}
-#define RET_WIDTH	800
-#define RET_HEIGHT	480
 #define RET_BPP		4
 
 /*
@@ -118,9 +116,9 @@ create_reticle(char *label, int w, int h, GFX_FONT font,
 	res->bm.h = h;
 	res->bm.maxc = 12;
 	res->bm.clut = (uint32_t *)ret_colors;
-	division = w / 10;
 	dma2d_clear(&(res->bm), DMA2D_COLOR_GREY);
 
+	division = w / 10;
 	g = gfx_init(&my_ctx, reticle_pixel, w, h, font, (void *)res);
 
 	/* Labels on the top and bottom, numbers on the left and bottom */
@@ -133,6 +131,9 @@ create_reticle(char *label, int w, int h, GFX_FONT font,
 	box_width = w - (margin_top + margin_left);
 	/* compute an even pixel count per division */
 	division = box_width / 10;
+	printf("Initial calc: box width, height %d, %d,  division size %d\n", division * 10, 
+			division  * 8, division);
+
 	/* 10 divsions wide by 8 divisions high */
 	box_width = division * 10;
 	box_height = division * 8;
@@ -141,11 +142,21 @@ create_reticle(char *label, int w, int h, GFX_FONT font,
 		division = (h - (margin_top + margin_bottom)) / 10;
 		box_height = 8 * division;
 		box_width = 10 * division;
+		printf("re-calc: box width, height %d, %d, division size %d\n", division * 10,
+			division * 8, division);
 	}
 	res->b_w = box_width;
 	res->b_h = box_height;
 	res->o_x = margin_left;
 	res->o_y = margin_top;
+
+#if 0
+	/* compute how big a bitmap we need */
+	w = box_width + margin_top + margin_left;
+	h = box_height + margin_top + margin_bottom;
+	/* reset the context with the new size */
+	g = gfx_init(&my_ctx, reticle_pixel, w, h, font, (void *)res);
+#endif
 
 	gfx_move_to(g, margin_left, margin_top);
 	gfx_fill_rounded_rectangle(g, box_width, box_height, 10, RCOLOR(1));
@@ -166,7 +177,7 @@ create_reticle(char *label, int w, int h, GFX_FONT font,
 	for (i = division; i < box_height; i += division) {
 		gfx_move_to(g, margin_left, margin_top + i);
 		gfx_draw_line(g, 15, 0, RCOLOR(2));
-		gfx_draw_line(g, box_height - 30, 0, RCOLOR(3));
+		gfx_draw_line(g, box_width - 30, 0, RCOLOR(3));
 		gfx_draw_line(g, 15, 0, RCOLOR(2));
 	}
 
