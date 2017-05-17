@@ -116,7 +116,6 @@ add_square(sample_buffer *s, float f, float a)
 }
 // #define DEBUG_FFT
 
-#define MAX_FFT_BINS	1024
 /* FFT data buffer */
 complex float __fft_data[MAX_FFT_BINS];
 

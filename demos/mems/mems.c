@@ -17,7 +17,7 @@
 
 #include "../util/util.h"
 #include "signal.h"
-#include "reticule.h"
+#include "reticle.h"
 /*
  * MEMS Setup
  * -------------------------------------------------------
@@ -50,9 +50,10 @@ main(void) {
 	uint32_t t0, t1;
 	double max_epsilon, avg_epsilon;
 	sample_buffer *signal, *fft, *mag0;
-	reticule_t *reticule;
+	reticle_t *reticle;
 	GFX_CTX	*g;
 	GFX_VIEW *vp;
+	GFX_VIEW local_vp;
 
 	signal = alloc_buf(1024);
 	mag0 = alloc_buf(1024);
@@ -62,11 +63,13 @@ main(void) {
 	rcc_periph_clock_enable(RCC_DMA2D);
 	fprintf(stderr, "FFT Exploration Demo program V2.2\n");
 
-	g = gfx_init(lcd_draw_pixel, 800, 480, GFX_FONT_LARGE,
+	g = gfx_init(NULL, lcd_draw_pixel, 800, 480, GFX_FONT_LARGE,
 										(void *)FRAMEBUFFER_ADDRESS);
-	dma2d_clear(&lcd_screen, DMA2D_GREY);
-	reticule = create_reticule();
-	dma2d_render(&(reticule->bm), &lcd_screen, 0, 0);
+	dma2d_clear(&lcd_screen, DMA2D_COLOR_GREY);
+	reticle = create_reticle("RF Power", 800, 480, GFX_FONT_LARGE,
+		"Frequency", 0, 1.0, 
+		"Power", -120, 0);
+	dma2d_render(&(reticle->bm), &lcd_screen, 0, 0);
 
 	/* fill signal buffer with test data */
 	// add_triangle(signal, 110.0, 1.0);
@@ -77,7 +80,7 @@ main(void) {
 	150hz is our slowest wave
 	1/150 is one cycle, times 2*pi, divided by number of bits
  */
-	signal->r = (150 * reticule->b_w) / (2 * M_PI) ;
+	signal->r = (150 * reticle->b_w) / (2 * M_PI) ;
 	add_cos(signal, 150.0, 1.0);
 	add_cos(signal, 300.0, 1.0);
 	// add_cos(signal, 600.0, 1.5);
@@ -85,9 +88,9 @@ main(void) {
 	/*
 	 * show our original signal
 	 */
-#define ONE_WAVE reticule->b_w
+#define ONE_WAVE reticle->b_w
 	
-	vp = gfx_viewport(g, reticule->o_x, reticule->o_y, reticule->b_w, reticule->b_h,
+	vp = gfx_viewport(&local_vp, g, reticle->o_x, reticle->o_y, reticle->b_w, reticle->b_h,
 			0, signal->sample_min, ONE_WAVE, signal->sample_max);
 	for (i = 1; i < ONE_WAVE; i++) {
 		vp_plot(vp, i - 1, *(signal->data + (i -1)),
@@ -120,12 +123,12 @@ main(void) {
 	/* Need a better way to 'label' these viewports */
 	gfx_set_text_size(g, 2);
 	gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_YELLOW);
-	gfx_set_text_cursor(g, reticule->o_x + 5,
-						   reticule->o_y+15 + gfx_get_text_height(g));
+	gfx_set_text_cursor(g, reticle->o_x + 5,
+						   reticle->o_y+15 + gfx_get_text_height(g));
 	gfx_puts(g, "FFT");
 
-	vp = gfx_viewport(g, reticule->o_x, reticule->o_y,
-						 reticule->b_w, reticule->b_h/2,
+	vp = gfx_viewport(&local_vp, g, reticle->o_x, reticle->o_y,
+						 reticle->b_w, reticle->b_h/2,
 						 0, mag0->sample_min, (float) bins, mag0->sample_max);
 	printvp(vp);
 	for (i = 1; i < bins; i++) {
@@ -150,11 +153,11 @@ main(void) {
 	t1 = mtime();
 	printf("Computed FFT in %ld milliseconds\n", t1 - t0);
 	gfx_set_text_color(g, GFX_COLOR_CYAN, GFX_COLOR_CYAN);
-	gfx_set_text_cursor(g, reticule->o_x + 5,
-						   reticule->o_y + 15 + reticule->b_h / 2 + gfx_get_text_height(g));
+	gfx_set_text_cursor(g, reticle->o_x + 5,
+						   reticle->o_y + 15 + reticle->b_h / 2 + gfx_get_text_height(g));
 	gfx_puts(g, "FFT (real)");
-	vp = gfx_viewport(g, reticule->o_x, reticule->o_y + reticule->b_h/2, 
-						 reticule->b_w, reticule->b_h/2,
+	vp = gfx_viewport(&local_vp, g, reticle->o_x, reticle->o_y + reticle->b_h/2, 
+						 reticle->b_w, reticle->b_h/2,
 						 0, fft->sample_min, (float) bins / 2, fft->sample_max);
 	printvp(vp);
 	for (i = 1; i < bins / 2; i++) {

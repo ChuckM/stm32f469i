@@ -23,8 +23,8 @@ DMA2D_BITMAP lcd_screen = {
 	.w = 800,
 	.h = 480,
 	.stride = 800 * 4,
-	.fg = DMA2D_WHITE,
-	.bg = DMA2D_BLACK,
+	.fg = DMA2D_COLOR_WHITE,
+	.bg = DMA2D_COLOR_BLACK,
 	.clut = NULL
 };
 

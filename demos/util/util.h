@@ -209,30 +209,33 @@ void dma2d_draw_24bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel);
 void dma2d_draw_32bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel);
 
 /* 50 % opaque black */
-#define DMA2D_SHADOW	(DMA2D_COLOR){.raw=0x80000000}
+#define DMA2D_COLOR_SHADOW	(DMA2D_COLOR){.raw=0x80000000}
 
-#define DMA2D_BLACK		(DMA2D_COLOR){.argb8888={0x00, 0x00, 0x00, 0xff}}
-#define DMA2D_DKGREY	(DMA2D_COLOR){.argb8888={0x55, 0x55, 0x55, 0xff}}
-#define DMA2D_GREY		(DMA2D_COLOR){.argb8888={0x80, 0x80, 0x80, 0xff}}
-#define DMA2D_LTGREY	(DMA2D_COLOR){.argb8888={0xaa, 0xaa, 0xaa, 0xff}}
-#define DMA2D_WHITE		(DMA2D_COLOR){.argb8888={0xff, 0xff, 0xff, 0xff}}
-#define DMA2D_DKBLUE	(DMA2D_COLOR){.argb8888={0xaa, 0x00, 0x00, 0xFF}}
-#define DMA2D_BLUE		(DMA2D_COLOR){.argb8888={0xff, 0x55, 0x55, 0xff}}
-#define DMA2D_LTBLUE	(DMA2D_COLOR){.argb8888={0xff, 0xaa, 0xaa, 0xff}}
-#define DMA2D_DKGREEN	(DMA2D_COLOR){.argb8888={0x00, 0xaa, 0x00, 0xff}}
-#define DMA2D_GREEN		(DMA2D_COLOR){.argb8888={0x55, 0xff, 0x55, 0xff}}
-#define DMA2D_LTGREEN	(DMA2D_COLOR){.argb8888={0xaa, 0xff, 0xaa, 0xff}}
-#define DMA2D_DKCYAN	(DMA2D_COLOR){.argb8888={0xaa, 0xaa, 0x00, 0xff}}
-#define DMA2D_CYAN		(DMA2D_COLOR){.argb8888={0xff, 0xff, 0x55, 0xff}}
-#define DMA2D_LTCYAN	(DMA2D_COLOR){.argb8888={0xff, 0xff, 0xaa, 0xff}}
-#define DMA2D_DKRED		(DMA2D_COLOR){.argb8888={0x00, 0x00, 0xaa, 0xff}}
-#define DMA2D_RED		(DMA2D_COLOR){.argb8888={0x55, 0x55, 0xff, 0xff}}
-#define DMA2D_LTRED		(DMA2D_COLOR){.argb8888={0xaa, 0xaa, 0xff, 0xff}}
-#define DMA2D_DKMAGENTA	(DMA2D_COLOR){.argb8888={0xaa, 0x00, 0xaa, 0xff}}
-#define DMA2D_MAGENTA	(DMA2D_COLOR){.argb8888={0xff, 0x55, 0xff, 0xff}}
-#define DMA2D_LTMAGENTA	(DMA2D_COLOR){.argb8888={0xff, 0xaa, 0xff, 0xff}}
-#define DMA2D_DKYELLOW	(DMA2D_COLOR){.argb8888={0x00, 0xaa, 0xaa, 0xff}}
-#define DMA2D_YELLOW	(DMA2D_COLOR){.argb8888={0x55, 0xff, 0xff, 0xff}}
-#define DMA2D_LTYELLOW	(DMA2D_COLOR){.argb8888={0xaa, 0xff, 0xff, 0xff}}
+/* Transparent black */
+#define DMA2D_COLOR_CLEAR		(DMA2D_COLOR){.raw=0x00000000}
+
+#define DMA2D_COLOR_BLACK		(DMA2D_COLOR){.argb8888={0x00, 0x00, 0x00, 0xff}}
+#define DMA2D_COLOR_DKGREY		(DMA2D_COLOR){.argb8888={0x55, 0x55, 0x55, 0xff}}
+#define DMA2D_COLOR_GREY		(DMA2D_COLOR){.argb8888={0x80, 0x80, 0x80, 0xff}}
+#define DMA2D_COLOR_LTGREY		(DMA2D_COLOR){.argb8888={0xaa, 0xaa, 0xaa, 0xff}}
+#define DMA2D_COLOR_WHITE		(DMA2D_COLOR){.argb8888={0xff, 0xff, 0xff, 0xff}}
+#define DMA2D_COLOR_DKBLUE		(DMA2D_COLOR){.argb8888={0xaa, 0x00, 0x00, 0xFF}}
+#define DMA2D_COLOR_BLUE		(DMA2D_COLOR){.argb8888={0xff, 0x55, 0x55, 0xff}}
+#define DMA2D_COLOR_LTBLUE		(DMA2D_COLOR){.argb8888={0xff, 0xaa, 0xaa, 0xff}}
+#define DMA2D_COLOR_DKGREEN		(DMA2D_COLOR){.argb8888={0x00, 0xaa, 0x00, 0xff}}
+#define DMA2D_COLOR_GREEN		(DMA2D_COLOR){.argb8888={0x55, 0xff, 0x55, 0xff}}
+#define DMA2D_COLOR_LTGREEN		(DMA2D_COLOR){.argb8888={0xaa, 0xff, 0xaa, 0xff}}
+#define DMA2D_COLOR_DKCYAN		(DMA2D_COLOR){.argb8888={0xaa, 0xaa, 0x00, 0xff}}
+#define DMA2D_COLOR_CYAN		(DMA2D_COLOR){.argb8888={0xff, 0xff, 0x55, 0xff}}
+#define DMA2D_COLOR_LTCYAN		(DMA2D_COLOR){.argb8888={0xff, 0xff, 0xaa, 0xff}}
+#define DMA2D_COLOR_DKRED		(DMA2D_COLOR){.argb8888={0x00, 0x00, 0xaa, 0xff}}
+#define DMA2D_COLOR_RED			(DMA2D_COLOR){.argb8888={0x55, 0x55, 0xff, 0xff}}
+#define DMA2D_COLOR_LTRED		(DMA2D_COLOR){.argb8888={0xaa, 0xaa, 0xff, 0xff}}
+#define DMA2D_COLOR_DKMAGENTA	(DMA2D_COLOR){.argb8888={0xaa, 0x00, 0xaa, 0xff}}
+#define DMA2D_COLOR_MAGENTA		(DMA2D_COLOR){.argb8888={0xff, 0x55, 0xff, 0xff}}
+#define DMA2D_COLOR_LTMAGENTA	(DMA2D_COLOR){.argb8888={0xff, 0xaa, 0xff, 0xff}}
+#define DMA2D_COLOR_DKYELLOW	(DMA2D_COLOR){.argb8888={0x00, 0xaa, 0xaa, 0xff}}
+#define DMA2D_COLOR_YELLOW		(DMA2D_COLOR){.argb8888={0x55, 0xff, 0xff, 0xff}}
+#define DMA2D_COLOR_LTYELLOW	(DMA2D_COLOR){.argb8888={0xaa, 0xff, 0xff, 0xff}}
 
 #endif /* generic header protector */

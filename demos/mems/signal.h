@@ -27,6 +27,8 @@ typedef struct {
 
 #define clear_samples(s)	memset(s->data, 0, sizeof(sample_t) * s->n)
 
+/* reduce this to save RAM */
+#define MAX_FFT_BINS	2048
 /*
  * Some syntactic sugar to make this oft used code
  */
