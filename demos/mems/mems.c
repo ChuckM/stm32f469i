@@ -65,8 +65,8 @@ main(void) {
 
 	g = gfx_init(NULL, lcd_draw_pixel, 800, 480, GFX_FONT_LARGE,
 										(void *)FRAMEBUFFER_ADDRESS);
-	dma2d_clear(&lcd_screen, DMA2D_COLOR_GREY);
-	reticle = create_reticle("RF Power", 800, 480, GFX_FONT_LARGE,
+	dma2d_clear(&lcd_screen, DMA2D_COLOR_BLACK);
+	reticle = create_reticle("RF Power", 640, 480, GFX_FONT_LARGE,
 		"Frequency", 0, 1.0, 
 		"Power", -120, 0);
 	dma2d_render(&(reticle->bm), &lcd_screen, 0, 0);

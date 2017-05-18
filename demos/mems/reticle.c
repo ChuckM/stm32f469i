@@ -129,6 +129,8 @@ create_reticle(char *label, int w, int h, GFX_FONT font,
 
 	/* Left over box width */
 	box_width = w - (margin_top + margin_left);
+	box_height = h - (margin_top + margin_bottom);
+	printf("Initial Box size: %d wide x %d tall\n", box_width, box_height);
 	/* compute an even pixel count per division */
 	division = box_width / 10;
 	printf("Initial calc: box width, height %d, %d,  division size %d\n", division * 10, 
