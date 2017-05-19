@@ -196,6 +196,7 @@ typedef struct __dma2d_bitmap  {
 /* Pre filled bitmap structure describing the LCD screen */
 extern DMA2D_BITMAP lcd_screen;
 
+int dma2d_mode_to_bpp(int mode);
 void dma2d_clear(DMA2D_BITMAP *bm, DMA2D_COLOR color);
 void dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y);
 /*

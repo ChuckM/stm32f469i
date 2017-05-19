@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <libopencm3/stm32/rcc.h>
+#include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/dma2d.h>
 #include <math.h>
 #include <gfx.h>
@@ -35,6 +36,8 @@ printvp(GFX_VIEW *vp)
 				vp->min_x, vp->min_y, vp->max_x, vp->max_y);
 }
 
+/* This points at the bit banded address of PD6 */
+int *pd6 = (int *)(0x42000000U + ((((GPIOD - GPIOA)) + 0x10) * 32) + (6 * 4));
 /*
  * Lets see if we can look at MEMs microphones
  * Mems microphone comes in on
@@ -46,10 +49,9 @@ printvp(GFX_VIEW *vp)
  */
 int
 main(void) {
-	int i, bins;
+	int i, frame_cnt, bins;
 	uint32_t t0, t1;
-	double max_epsilon, avg_epsilon;
-	sample_buffer *signal, *fft, *mag0;
+	sample_buffer *signal, *mag0;
 	reticle_t *reticle;
 	GFX_CTX	*g;
 	GFX_VIEW *vp;
@@ -57,18 +59,28 @@ main(void) {
 
 	signal = alloc_buf(1024);
 	mag0 = alloc_buf(1024);
-	fft = alloc_buf(1024);
 
 	/* Enable the clock to the DMA2D device */
 	rcc_periph_clock_enable(RCC_DMA2D);
+	rcc_periph_clock_enable(RCC_GPIOD);
+	gpio_mode_setup(GPIOD, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO13);
+	gpio_mode_setup(GPIOD, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO6);
+
 	fprintf(stderr, "FFT Exploration Demo program V2.2\n");
 
 	g = gfx_init(NULL, lcd_draw_pixel, 800, 480, GFX_FONT_LARGE,
 										(void *)FRAMEBUFFER_ADDRESS);
-	dma2d_clear(&lcd_screen, DMA2D_COLOR_BLACK);
+
+	printf("Frame buffer address is : 0x%x\n", FRAMEBUFFER_ADDRESS);
+
 	reticle = create_reticle("RF Power", 640, 480, GFX_FONT_LARGE,
-		"Frequency", 0, 1.0, 
+		"Frequency", 0, 512, 
 		"Power", -120, 0);
+	vp = gfx_viewport(&local_vp, g, reticle->o_x + 2, reticle->o_y + 2,
+									reticle->b_w - 4, reticle->b_h - 4,
+			0, 0, reticle->b_w - 4, 1.0);
+
+	dma2d_clear(&lcd_screen, DMA2D_COLOR_BLACK); /* option 1 this does not work? */
 	dma2d_render(&(reticle->bm), &lcd_screen, 0, 0);
 
 	/* fill signal buffer with test data */
@@ -90,13 +102,48 @@ main(void) {
 	 */
 #define ONE_WAVE reticle->b_w
 	
-	vp = gfx_viewport(&local_vp, g, reticle->o_x, reticle->o_y, reticle->b_w, reticle->b_h,
-			0, signal->sample_min, ONE_WAVE, signal->sample_max);
+	vp_rescale(vp, 0, signal->sample_min, ONE_WAVE, signal->sample_max);
 	for (i = 1; i < ONE_WAVE; i++) {
 		vp_plot(vp, i - 1, *(signal->data + (i -1)),
 					    i, *(signal->data + i), GFX_COLOR_DKGREEN);
 	}
 	lcd_flip(0);
+
+	frame_cnt = 0;
+	vp_rescale(vp, 0, -1.0, 1024, 1.0);
+	while (1) {
+		reset_minmax(signal);
+		dma2d_clear(&lcd_screen, DMA2D_COLOR_BLACK); /* option 1 this does not work? */
+		dma2d_render(&(reticle->bm), &lcd_screen, 0, 0); 
+		printf("%d\n", frame_cnt++);
+		t0 = mtime();
+		for (i = 0; i < 1024; i++) {
+			signal->data[i] = 0;
+#define SAMPLE_MAX_BITS	256
+			for (int k = 0; k < SAMPLE_MAX_BITS; k++) {
+				gpio_clear(GPIOD, GPIO13);
+				gpio_set(GPIOD, GPIO13);
+				signal->data[i] += *pd6;
+			}
+			signal->data[i] = signal->data[i] / 256;
+			set_minmax(signal, i);
+		}
+		t1 = mtime();
+		printf("Sample time: %d mS\n", t1 - t0);
+		for (i = 1; i < 1024; i++) {
+			vp_plot(vp, i-1, signal->data[i-1], i, signal->data[i], GFX_COLOR_YELLOW);
+		}
+		gfx_set_text_size(g, 2);
+		gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_YELLOW);
+		gfx_set_text_cursor(g, reticle->o_x + 5,
+						   reticle->o_y+15 + gfx_get_text_height(g));
+		gfx_puts(g, "FFT");
+		printf("Signal min/max %f/%f\n", signal->sample_min, signal->sample_max);
+		lcd_flip(0);
+		msleep(1000);
+	}
+
+				
 
 	/* fill signal buffer with test data */
 	// add_triangle(signal, 110.0, 1.0);
@@ -105,7 +152,14 @@ main(void) {
 	signal->r = 512;
 	add_cos(signal, 150.0, 1.0);
 	add_cos(signal, 300.0, 1.0);
-	// add_cos(signal, 600.0, 1.5);
+	add_cos(signal, 146.0, 1.0);
+	add_cos(signal, 148.1, 1.0);
+	add_cos(signal, 144.2, 1.0);
+	add_cos(signal, 150.3, 1.0);
+	add_cos(signal, 152.4, 1.0);
+	add_cos(signal, 154.5, 1.0);
+	add_cos(signal, 156.6, 1.0);
+	add_cos(signal, 300.0, 1.0);
 
 
 
@@ -127,52 +181,12 @@ main(void) {
 						   reticle->o_y+15 + gfx_get_text_height(g));
 	gfx_puts(g, "FFT");
 
-	vp = gfx_viewport(&local_vp, g, reticle->o_x, reticle->o_y,
-						 reticle->b_w, reticle->b_h/2,
-						 0, mag0->sample_min, (float) bins, mag0->sample_max);
+	vp_rescale(vp, 0, mag0->sample_min, (float) bins/2, mag0->sample_max);
 	printvp(vp);
-	for (i = 1; i < bins; i++) {
+	for (i = 1; i < bins/2; i++) {
 		vp_plot(vp, i - 1, mag0->data[i - 1],
 				    i, mag0->data[i], GFX_COLOR_YELLOW);
 	}
 	lcd_flip(0);
-
-	signal->r = 512;
-	add_cos(signal, 146.0, 1.0);
-	add_cos(signal, 148.0, 1.0);
-	add_cos(signal, 144.0, 1.0);
-	add_cos(signal, 150.0, 1.0);
-	add_cos(signal, 152.0, 1.0);
-	add_cos(signal, 154.0, 1.0);
-	add_cos(signal, 156.0, 1.0);
-	add_cos(signal, 300.0, 1.0);
-
-	printf("Compute FFT\n");
-	t0 = mtime();
-	calc_fft(signal, bins, fft);
-	t1 = mtime();
-	printf("Computed FFT in %ld milliseconds\n", t1 - t0);
-	gfx_set_text_color(g, GFX_COLOR_CYAN, GFX_COLOR_CYAN);
-	gfx_set_text_cursor(g, reticle->o_x + 5,
-						   reticle->o_y + 15 + reticle->b_h / 2 + gfx_get_text_height(g));
-	gfx_puts(g, "FFT (real)");
-	vp = gfx_viewport(&local_vp, g, reticle->o_x, reticle->o_y + reticle->b_h/2, 
-						 reticle->b_w, reticle->b_h/2,
-						 0, fft->sample_min, (float) bins / 2, fft->sample_max);
-	printvp(vp);
-	for (i = 1; i < bins / 2; i++) {
-		vp_plot(vp, i - 1, fft->data[i - 1], i, fft->data[i], GFX_COLOR_CYAN);
-	}
-	lcd_flip(0);
-	max_epsilon = avg_epsilon = 0;
-	for (int j = 0; j < bins; j++) {
-		double td;
-		td = abs(mag0->data[j] - fft->data[j]);
-		max_epsilon = max(td, max_epsilon);
-		avg_epsilon += td;
-	}
-	avg_epsilon /= (double) bins;
-	printf("Differences, max epsilon = %f, average %f\n",
-		max_epsilon, avg_epsilon);
 	while (1) ;
 }

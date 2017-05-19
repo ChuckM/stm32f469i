@@ -12,12 +12,13 @@
  * configured we don't want to try to use it for dynamic memory!
  */
 #include <stdint.h>
+#include <stdio.h>
 #include <errno.h>
 #include <malloc.h>
 #include "../util/util.h"
 
 /* 1 MB of heap space */
-#define MAX_HEAP_SIZE	0x100000ul
+#define MAX_HEAP_SIZE	0x200000ul
 
 static uint8_t *_cur_brk = (uint8_t *) (FRAMEBUFFER_ADDRESS - MAX_HEAP_SIZE);
 void *_sbrk_r(struct _reent *, ptrdiff_t );
@@ -31,5 +32,11 @@ void *_sbrk_r(struct _reent *reent, ptrdiff_t diff)
     }
     _cur_brk += diff;
     return _old_brk;
+}
+
+void _free_r(struct _reent *reent, void *ptr) {
+	/* what to do here? */	
+	reent->_errno = 0;
+	printf("_free_r(0x%x)\n", (unsigned int)(ptr));
 }
 

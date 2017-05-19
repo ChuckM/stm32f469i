@@ -10,6 +10,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 #include <stdio.h>
 #include <libopencm3/stm32/dma2d.h>
 #include "../util/util.h"
@@ -27,6 +28,36 @@ DMA2D_BITMAP lcd_screen = {
 	.bg = DMA2D_COLOR_BLACK,
 	.clut = NULL
 };
+
+/*
+ * dma2d_mode_to_bpp( ... )
+ *
+ * Return number of bits per pixel for the given mode.
+ */
+int
+dma2d_mode_to_bpp(int m)
+{
+	switch (m) {
+		case DMA2D_ARGB8888:
+			return 32;
+		case DMA2D_RGB888:
+			return 24;
+		case DMA2D_ARGB1555:
+		case DMA2D_ARGB4444:
+		case DMA2D_RGB565:
+		case DMA2D_AL88:
+			return 16;
+		case DMA2D_L8:
+		case DMA2D_A8:
+		case DMA2D_AL44:
+			return 8;
+		case DMA2D_L4:
+		case DMA2D_A4:
+			return 4;
+		default:
+			return 0;
+	}
+}
 
 /*
  * dma2d_draw_4bpp -- Write nyblets into the framebuffer
@@ -86,10 +117,14 @@ dma2d_draw_32bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel)
 
 /*
  * Clear the bitmap to a single color value.
+ * XXX this fails if the bitmap isn't an RGBA bitmap
  */
 void
 dma2d_clear(DMA2D_BITMAP *bm, DMA2D_COLOR color)
 {
+	memset(bm->buf, (color.raw & 0xff), 
+			(bm->w * bm->h * dma2d_mode_to_bpp(bm->mode)) / 8);
+#if 0
     DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_R2M);
     DMA2D_OPFCCR = bm->mode;
     DMA2D_OCOLR = color.raw;
@@ -99,6 +134,7 @@ dma2d_clear(DMA2D_BITMAP *bm, DMA2D_COLOR color)
 
     /* kick it off */
     DMA2D_CR |= DMA2D_CR_START;
+#endif
 }
 
 /* lookup table relates Color Mode to Bits per Pixel */
