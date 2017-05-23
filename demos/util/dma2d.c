@@ -55,7 +55,7 @@ dma2d_mode_to_bpp(int m)
 		case DMA2D_A4:
 			return 4;
 		default:
-			return 0;
+			return 1;
 	}
 }
 
@@ -137,12 +137,6 @@ dma2d_clear(DMA2D_BITMAP *bm, DMA2D_COLOR color)
 #endif
 }
 
-/* lookup table relates Color Mode to Bits per Pixel */
-static const uint8_t mode2bpp[] = {
-/*   0   1   2   3  4   5  6   7  8  9 10 11 12 13 14 15 */
-	32, 24, 16, 16, 16, 8, 8, 16, 4, 8, 4, 1, 1, 1, 1, 1
-};
-
 /*
  * dma2d_render( ... )
  *
@@ -185,7 +179,7 @@ dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y)
 	}
 
 	/* pixel data */
-	i = mode2bpp[dst->mode] / 8; /* bytes per pixel */
+	i = dma2d_mode_to_bpp(dst->mode) / 8; /* bytes per pixel */
 
 	DMA2D_BGMAR = (uint32_t) (((uint8_t *)dst->buf) + (dst->w * i * y) + (x * i));
 
