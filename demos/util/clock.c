@@ -103,7 +103,7 @@ void clock_setup(void)
 	 */
 	rcc_osc_on(RCC_PLL);
 	rcc_wait_for_osc_ready(RCC_PLL);
-	flash_set_ws(FLASH_ACR_ICE | FLASH_ACR_DCE | FLASH_ACR_LATENCY_5WS);
+	flash_set_ws(FLASH_ACR_ICEN | FLASH_ACR_DCEN | FLASH_ACR_LATENCY_5WS);
 	rcc_set_sysclk_source(RCC_CFGR_SW_PLL);
 	rcc_wait_for_sysclk_status(RCC_PLL);
 	rcc_ahb_frequency = 180000000;

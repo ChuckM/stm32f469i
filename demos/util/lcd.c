@@ -14,21 +14,7 @@
 #include <libopencm3/cm3/memorymap.h>
 #include <libopencm3/cm3/scb.h>
 #include "../util/util.h"
-
-/*
- * A couple of helper macros to avoid copy pasta code
- * For multi-bit fields we can use these macros to create
- * a unified SET_<reg>_<field> version and a GET_<reg_<field> version.
- */
-#define LTDC_GET(reg, field, x) \
-    (((x) >> LTDC_ ## reg ## _ ## field ##_SHIFT) & LTDC_ ## reg ##_ ## field ##_MASK)
-
-#define LTDC_SET(reg, field, x) \
-    (((x) & LTDC_ ## reg ##_## field ##_MASK) << LTDC_## reg ##_## field ##_SHIFT)
-
-#define LTDC_MASK(reg, field) \
-    ((LTDC_ ## reg ##_## field ##_MASK) << LTDC_## reg ##_## field ##_SHIFT)
-
+#include "../util/helpers.h"
 
 #define LCD_FORMAT_LANDSCAPE
 
@@ -307,7 +293,7 @@ ltdc_layer_setup(void)
 	LTDC_L1CFBAR = (uint32_t) FRAMEBUFFER_ADDRESS;
 	LTDC_L1CFBLR = LTDC_SET(LxCFBLR, CFBP, (800 * 4)) | LTDC_SET(LxCFBLR, CFBLL, (800 * 4) + 3);
 	LTDC_L1CFBLNR = 480;
-	LTDC_L1CR = LTDC_LxCR_LEN; /* no color key, no lookup table */
+	LTDC_L1CR = LTDC_LxCR_LAYER_ENABLE; /* no color key, no lookup table */
 
 	/* immediate load from shadow */
 	LTDC_SRCR = LTDC_SRCR_IMR;
