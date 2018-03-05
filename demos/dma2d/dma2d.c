@@ -137,6 +137,7 @@ skew_factor(int dy, int h)
 /* gap question, is disp_height everything, including gaps? (same with display width?) */
 /* How about display pad, for the "socket" around the display? */
 /* How about the decimal point with respect to the digits? */
+#define OUTLINE_DIGIT_BOX
 
 /*
  * Draw a graphic that looks like a 7 segment display
@@ -793,6 +794,12 @@ uint32_t frame_times[N_FRAMES] = {
 
 int te_lock = 1;
 
+static void
+draw_pixel(void *buf, int x, int y, GFX_COLOR c)
+{
+	lcd_draw_pixel(buf, x, y, c.raw);
+}
+
 /*
  * This is the code for the simple DMA2D Demo
  *
@@ -812,6 +819,7 @@ main(void) {
 	float avg_frame;
 	int	can_switch;
 	int	opt, ds;
+	GFX_CTX local_context;
 	GFX_CTX *g;
 
 	/* Enable the clock to the DMA2D device */
@@ -822,11 +830,26 @@ main(void) {
 	printf("Generate digits\n");
 	generate_digits();
 
-	g = gfx_init(NULL, lcd_draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAMEBUFFER_ADDRESS);
+	g = gfx_init(&local_context, draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAMEBUFFER_ADDRESS);
 	opt = 0; /* screen clearing mode */
 	can_switch = 0; /* auto switching every 10 seconds */
 	t0 = mtime();
 	ds = 0;
+/******* TESTING CODE ********/
+	gfx_fill_screen(g, GFX_COLOR_WHITE);
+	draw_digit(g, 100, 100, 8, GFX_COLOR_RED, GFX_COLOR_BLACK);
+
+	/* In both cases we write the notes using the graphics library */
+	gfx_fill_triangle_at(g, 300, 300, 300, 200, 400, 200, GFX_COLOR_GREEN);
+	gfx_draw_triangle_at(g, 300, 300, 300, 200, 400, 200, GFX_COLOR_RED);
+	gfx_set_text_color(g, GFX_COLOR_BLACK, GFX_COLOR_BLACK);
+	gfx_set_text_size(g, 3);
+	gfx_set_text_cursor(g, 25, 30 + DISP_HEIGHT + gfx_get_text_height(g) + 2);
+	gfx_puts(g, (char *)"Hello world for DMA2D!");
+	lcd_flip(te_lock);
+	while (1) ;
+/****************** ####### ***********/
+	
 	while (1) {
 		switch (opt) {
 		default:
