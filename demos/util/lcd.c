@@ -501,7 +501,7 @@ lcd_flip(int te_lock)
  *  to the simple graphics library.
  */
 void
-lcd_draw_pixel(void * buf, int x, int y, GFX_COLOR color)
+lcd_draw_pixel(void * buf, int x, int y, uint32_t color)
 {
 	uint32_t dx, dy;
 	uint32_t *ptr = (uint32_t *)buf;
@@ -509,7 +509,7 @@ lcd_draw_pixel(void * buf, int x, int y, GFX_COLOR color)
 
 
 	dx = x; dy = y;
-	pixel = 0xff000000 | color.raw;
+	pixel = 0xff000000 | color;
 	*(ptr + dy * 800U + dx) = pixel;
 }
 

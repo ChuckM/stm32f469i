@@ -17,8 +17,8 @@
 #include <malloc.h>
 #include "../util/util.h"
 
-/* 1 MB of heap space */
-#define MAX_HEAP_SIZE	0x200000ul
+/* 10 MB of heap space */
+#define MAX_HEAP_SIZE	0xa00000ul
 
 static uint8_t *_cur_brk = (uint8_t *) (FRAMEBUFFER_ADDRESS - MAX_HEAP_SIZE);
 void *_sbrk_r(struct _reent *, ptrdiff_t );

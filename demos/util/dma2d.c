@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <libopencm3/stm32/dma2d.h>
 #include "../util/util.h"
+#include "../util/helpers.h"
 
 /*
  * This is the DMA2D Bitmap representing the LCD Screen.
@@ -172,7 +173,7 @@ dma2d_render(DMA2D_BITMAP *src, DMA2D_BITMAP *dst, int x, int y)
 	DMA2D_FGPFCCR = src->mode;
 	/* If Max Color is non-zero, load the color table */
 	if (src->maxc > 0) {
-		DMA2D_FGPFCCR |= (src->maxc) << DMA2D_FGPFCCR_CS_SHIFT;
+		DMA2D_FGPFCCR |= (src->maxc) << DMA2D_xPFCCR_CS_SHIFT;
 		for (i = 0; i < src->maxc; i++) {
 			*(DMA2D_FG_CLUT + i) = *(src->clut + i);
 		}
