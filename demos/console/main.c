@@ -25,8 +25,7 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/usart.h>
-#include "../util/clock.h"
-#include "../util/console.h"
+#include "../util/util.h"
 
 /*
  * Set up the GPIO subsystem with an "Alternate Function"
@@ -40,7 +39,7 @@ int main(void)
 
 	clock_setup(); /* initialize our clock */
 
-	console_setup(115200);
+	console_setup(57600);
 
 	/* At this point our console is ready to go so we can create our
 	 * simple application to run on it.
