@@ -7,6 +7,7 @@
 #include <libopencm3/stm32/dma2d.h>
 #include <gfx.h>
 #include "../util/util.h"
+#include "../util/helpers.h"
 #include "term.h"
 
 /* This gives 4 equal tempered grey levels 0, 55, aa, ff */
@@ -363,14 +364,14 @@ dma2d_char(uint32_t glyph, int w, int h, uint32_t addr, uint32_t fg, uint32_t bg
 	 * color and FG_COLR set to the foreground color. BG Alpha is fixed at 0xff
 	 * and FG Alpha comes from the glyph data.
 	 */
-	DMA2D_BGPFCCR = DMA2D_SET(BGPFCCR, CM, DMA2D_FGPFCCR_CM_A8) | DMA2D_SET(BGPFCCR, AM, 1) |
-					DMA2D_SET(BGPFCCR, ALPHA, 0xff);
+	DMA2D_BGPFCCR = DMA2D_SET(xPFCCR, CM, DMA2D_xPFCCR_CM_A8) | DMA2D_SET(xPFCCR, AM, 1) |
+					DMA2D_SET(xPFCCR, ALPHA, 0xff);
 	DMA2D_BGMAR = glyph;
 	DMA2D_BGOR = 0;
 	DMA2D_BGCOLR = bg;
 
-	DMA2D_FGPFCCR = DMA2D_SET(FGPFCCR, CM, DMA2D_FGPFCCR_CM_A8) | DMA2D_SET(FGPFCCR, AM, 2) |
-					DMA2D_SET(FGPFCCR, ALPHA, 0xff);
+	DMA2D_FGPFCCR = DMA2D_SET(xPFCCR, CM, DMA2D_xPFCCR_CM_A8) | DMA2D_SET(xPFCCR, AM, 2) |
+					DMA2D_SET(xPFCCR, ALPHA, 0xff);
 	DMA2D_FGMAR = glyph;
 	DMA2D_FGOR = 0;
 	DMA2D_FGCOLR = fg;
@@ -534,30 +535,33 @@ static struct {
  * to initialize our buffer of characters.
  */
 static void
-draw_splash_pixel(int x, int y, uint16_t color) {
-	uint32_t pixel;
+draw_splash_pixel(void *b, int x, int y, GFX_COLOR color) {
 
-	pixel = (color & 0xf000) << 12 |
-			(color & 0x0f00) << 8 |
-			(color & 0xff);
-
-	buffer[y*TERM_WIDTH + x] = pixel;
+	uint32_t	*fb = (uint32_t *)b;
+	*(fb + y*TERM_WIDTH + x) = color.raw;
 }
 
 /*
  * Splash screen generator
  */
 
+#define SC_A	(GFX_COLOR){.raw=(0x200 | ' ')}
+#define SC_B	(GFX_COLOR){.raw=(0x500 | '*')}
+#define SC_C	(GFX_COLOR){.raw=(0x200 | '*')}
+
 static void
 generate_splash(void) {
-	gfx_init(draw_splash_pixel, TERM_WIDTH, TERM_HEIGHT, GFX_FONT_LARGE);
+	GFX_CTX glocal;
+	GFX_CTX *g;
+	g = gfx_init(&glocal, draw_splash_pixel, TERM_WIDTH, TERM_HEIGHT, GFX_FONT_LARGE, &buffer);
 
-	gfx_fillScreen((uint16_t) 0x0200 | ' ');
-	gfx_drawRoundRect(0, 0, TERM_WIDTH, TERM_HEIGHT, 5, 0x0500 | '*');
-	gfx_setCursor(3, 12);
+	gfx_fill_screen(g, SC_A);
+	gfx_move(g, 0, 0);
+	gfx_draw_rounded_rectangle(g, TERM_WIDTH, TERM_HEIGHT, 5, SC_B);
+	gfx_set_text_cursor(g, 3, 12);
 	/* this text doesn't write the 'background' color */
-	gfx_setTextColor((uint16_t) 0x0200| '*', (uint16_t) 0x0200| ' ');
-	gfx_puts((unsigned char *) "TERM V0.2");
+	gfx_set_text_color(g, SC_C, SC_A);
+	gfx_puts(g, "TERM V0.2");
 }
 
 /*
