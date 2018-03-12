@@ -118,12 +118,15 @@ static const struct {
 /*6*/	{ 4, 1, 1, SEG_THICK + SEG_GAP, SEG_THICK, &h_seg[0] },
 };
 
-#define SKEW_MAX (DISP_WIDTH / 3)
+#define SKEW_MAX (DISP_WIDTH / 3.0)
+#define SKEW_FACTOR ((SKEW_MAX) / DISP_HEIGHT)
+
 /*
- * Compute a "skew factor" so the display leans right
- * Takes x (computed x), dy (distance from top), and
- * display height (max distance from top). Slant goes
- * from 0 at dy == h to SKEW_MAX when dy == 0
+ * Compute a "skew factor".
+ * Compute a 'delta x' factor to add to the X coordinate
+ * when transitioning delta Y pixels. 
+ *
+ * Slant goes from 0 at dy == h to SKEW_MAX when dy == 0
  */
 static int
 skew_factor(int dy, int h)
@@ -137,11 +140,18 @@ skew_factor(int dy, int h)
 /* gap question, is disp_height everything, including gaps? (same with display width?) */
 /* How about display pad, for the "socket" around the display? */
 /* How about the decimal point with respect to the digits? */
-#define OUTLINE_DIGIT_BOX
+// #define OUTLINE_DIGIT_BOX (broken)
 
 /*
  * Draw a graphic that looks like a 7 segment display
- * digit. (yes its retro, ok?)
+ * digit. 
+ *
+ * The reference point for the digit is the lower left corner
+ * of the "display" so digits go up and to the right from that point.
+ * Because Y is inverted in this display (larger Y means lower point)
+ * Height is "negative" with respect to the starting point. (XXX look
+ * this, can we make the graphics "sane" with respect to X and Y and
+ * map it in the simple-graphics library appropriately?
  */
 void
 draw_digit(GFX_CTX *g, int x, int y, int d, GFX_COLOR color, GFX_COLOR outline) {
@@ -152,29 +162,15 @@ draw_digit(GFX_CTX *g, int x, int y, int d, GFX_COLOR color, GFX_COLOR outline) 
 	seg_mask = seg_map[d % 10];
 
 #ifdef OUTLINE_DIGIT_BOX
-	gfx_draw_line_at(g,
-		skew_factor(0, DISP_HEIGHT) + x - 1,
-		y - 1,
-		skew_factor(0, DISP_HEIGHT) + x + DISP_WIDTH+2,
-		y - 1, GFX_COLOR_BLUE);
-	gfx_draw_line_at(g,
-		skew_factor(0, DISP_HEIGHT) + x + DISP_WIDTH+2,
-		y - 1,
-		skew_factor(DISP_HEIGHT, DISP_HEIGHT) + x + DISP_WIDTH+2,
-		y + DISP_HEIGHT + 2, GFX_COLOR_BLUE);
-	gfx_draw_line_at(g,
-		skew_factor(DISP_HEIGHT, DISP_HEIGHT) + x + DISP_WIDTH+2,
-		y + DISP_HEIGHT + 2,
-		skew_factor(DISP_HEIGHT, DISP_HEIGHT) + x - 1,
-		y + DISP_HEIGHT + 2, GFX_COLOR_BLUE);
-	gfx_draw_line_at(g,
-		skew_factor(DISP_HEIGHT, DISP_HEIGHT) + x - 1,
-		y + DISP_HEIGHT + 2,
-		skew_factor(0, DISP_HEIGHT) + x - 1,
-		y - 1, GFX_COLOR_BLUE);
+	gfx_move(g, x - 1, y + 1);
+	gfx_draw_line(g, (int) SKEW_FACTOR * (DISP_HEIGHT + 2), -(DISP_HEIGHT+2), GFX_COLOR_BLUE);
+	gfx_draw_line(g, DISP_WIDTH + 2, 0, GFX_COLOR_BLUE);
+	gfx_draw_line(g, (int) - SKEW_FACTOR * (DISP_HEIGHT + 2), DISP_HEIGHT + 2, GFX_COLOR_BLUE);
+	gfx_draw_line(g, - (DISP_WIDTH + 2), 0, GFX_COLOR_BLUE);
 #endif
 
 	for (i = 0; i < 7; i++) {
+		/* test to see if segment is 'lit' for this number */
 		if ((seg_mask & (1 << i)) != 0) {
 			/* draw segment */
 			sx = x + segment_data[i].xo;
@@ -183,13 +179,18 @@ draw_digit(GFX_CTX *g, int x, int y, int d, GFX_COLOR color, GFX_COLOR outline) 
 			yf = segment_data[i].yf;
 			/* tesselate it */
 			for (ndx = 2; ndx < (segment_data[i].n_coords - 1) * 2; ndx += 2) {
-				gfx_fill_triangle_at(g,
+				/* move to segment reference point given X, Y, and Skew */
+				gfx_move(g, sx, sy);
+					
+				gfx_fill_triangle_abs(g,
 					skew_factor((sy + *(segment_data[i].segs + 1) * yf - y), DISP_HEIGHT) +
 							sx + *(segment_data[i].segs) * xf,
 					sy + *(segment_data[i].segs + 1) * yf,			/* #1 */
+
 					skew_factor((sy + *(segment_data[i].segs + ndx + 1) * yf - y), DISP_HEIGHT) +
 						sx	+ *(segment_data[i].segs + ndx) * xf,
 					sy + *(segment_data[i].segs + ndx + 1) * yf,	/* #2 */
+
 					skew_factor((sy + *(segment_data[i].segs + ndx + 3) * yf - y), DISP_HEIGHT) +
 					     sx + *(segment_data[i].segs + ndx + 2) * xf,
 					sy + *(segment_data[i].segs + ndx + 3) * yf,	/* #3 */
@@ -224,7 +225,7 @@ draw_digit(GFX_CTX *g, int x, int y, int d, GFX_COLOR color, GFX_COLOR outline) 
 			yf = segment_data[i].yf;
 			/* tesselate it */
 			for (ndx = 2; ndx < (segment_data[i].n_coords - 1) * 2; ndx += 2) {
-				gfx_fill_triangle_at(g,
+				gfx_fill_triangle_abs(g,
 					skew_factor((sy + *(segment_data[i].segs + 1) * yf - y), DISP_HEIGHT) +
 							sx + *(segment_data[i].segs) * xf,
 					sy + *(segment_data[i].segs + 1) * yf,			/* #1 */
@@ -239,7 +240,7 @@ draw_digit(GFX_CTX *g, int x, int y, int d, GFX_COLOR color, GFX_COLOR outline) 
 			}
 			/* outline it */
 			for (ndx = 0; ndx < (segment_data[i].n_coords - 1) * 2; ndx += 2) {
-				gfx_draw_line_at(g,
+				gfx_draw_line_abs(g,
 					skew_factor((sy + *(segment_data[i].segs + ndx + 1) * yf - y), DISP_HEIGHT) +
 						sx + *(segment_data[i].segs + ndx) * xf,
 					sy + *(segment_data[i].segs + ndx + 1) * yf,
@@ -248,7 +249,7 @@ draw_digit(GFX_CTX *g, int x, int y, int d, GFX_COLOR color, GFX_COLOR outline) 
 					sy + *(segment_data[i].segs + ndx + 3) * yf,
 							outline);
 			}
-			gfx_draw_line_at(g,
+			gfx_draw_line_abs(g,
 				skew_factor((sy + *(segment_data[i].segs + 1) * yf - y), DISP_HEIGHT) +
 							sx + *(segment_data[i].segs + 0) * xf,
 				sy + *(segment_data[i].segs + 1) * yf,
@@ -355,62 +356,62 @@ dma2d_clock(int x, int y, uint32_t tm, int ds)
 	ss = (int) (tm % 60000) / 1000;
 	ms = (int) tm % 1000;
 	if (ds) {
-		dma2d_digit(x+10, y+10, hh / 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, hh / 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, hh / 10, DMA2D_RED, DMA2D_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
 	if (ds) {
-		dma2d_digit(x+10, y+10, hh % 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, hh % 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, hh % 10, DMA2D_RED, DMA2D_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
 	if (ds) {
-		dma2d_digit(x+10, y+10, 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, 10, DMA2D_RED, DMA2D_BLACK);
 	x += SEG_THICK + SEG_THICK/2;;
 	if (ds) {
-		dma2d_digit(x+10, y+10, mm / 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, mm / 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, mm / 10, DMA2D_RED, DMA2D_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
 	if (ds) {
-		dma2d_digit(x+10, y+10, mm % 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, mm % 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, mm % 10, DMA2D_RED, DMA2D_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
 	if (ds) {
-		dma2d_digit(x+10, y+10, 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, 10, DMA2D_RED, DMA2D_BLACK);
 	x += SEG_THICK + SEG_THICK/2;;
 	if (ds) {
-		dma2d_digit(x+10, y+10, ss / 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, ss / 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, ss / 10, DMA2D_RED, DMA2D_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
 	if (ds) {
-		dma2d_digit(x+10, y+10, ss % 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, ss % 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, ss % 10, DMA2D_RED, DMA2D_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
 	if (ds) {
-		dma2d_digit(x+10, y+10, 11, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, 11, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, 11, DMA2D_RED, DMA2D_BLACK);
 	x += SEG_THICK + SEG_THICK/2;
 	if (ds) {
-		dma2d_digit(x+10, y+10, (ms / 100) % 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, (ms / 100) % 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, (ms / 100) % 10, DMA2D_RED, DMA2D_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
 	if (ds) {
-		dma2d_digit(x+10, y+10, (ms / 10) % 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, (ms / 10) % 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, (ms / 10) % 10, DMA2D_RED, DMA2D_BLACK);
 	x += DISP_WIDTH + SEG_THICK/2;
 	if (ds) {
-		dma2d_digit(x+10, y+10, ms % 10, SHADOW, SHADOW);
+		dma2d_digit(x + 10, y + 10, ms % 10, SHADOW, SHADOW);
 	}
 	dma2d_digit(x, y, ms % 10, DMA2D_RED, DMA2D_BLACK);
 }
@@ -573,17 +574,16 @@ generate_background(void)
 void digit_draw_pixel(void *, int x, int y, GFX_COLOR color);
 void print_digit(int n);
 
-#define DIGIT_FB_WIDTH 	((DISP_WIDTH + SKEW_MAX) * 10 + (SEG_THICK + SKEW_MAX) * 2)
-#define DIGIT_FB_HEIGHT (DISP_HEIGHT)
 
-uint8_t digit_fb[DIGIT_FB_WIDTH * DIGIT_FB_HEIGHT];
+uint8_t *digit_fb;/*  [digit_fb_width * digit_fb_height]; */
+int digit_fb_width, digit_fb_height;
 
 /* This is the simple graphics helper function to draw into it */
 void
 digit_draw_pixel(void *fb, int x, int y, GFX_COLOR color)
 {
 	uint8_t	c = (uint8_t) color.raw;
-	*((uint8_t *)fb + y * DIGIT_FB_WIDTH + x) = c;
+	*((uint8_t *)fb + y * digit_fb_width + x) = c;
 }
 
 /*
@@ -595,10 +595,10 @@ print_digit(int n) {
 	uint8_t *row;
 	unsigned int tx, ty;
 
-	printf("Digit FB size (W, H) = (%d, %d)\n", DIGIT_FB_WIDTH, DIGIT_FB_HEIGHT);
-	row = (uint8_t *)&digit_fb[(n % 10) * (DISP_WIDTH+SKEW_MAX)];
+	printf("Digit FB size (W, H) = (%d, %d)\n", digit_fb_width, digit_fb_height);
+	row = (uint8_t *)&digit_fb[(n % 10) * (DISP_WIDTH+ (int) SKEW_MAX)];
 	for (ty = 0; ty < DISP_HEIGHT; ty++) {
-		for (tx = 0; tx < (DISP_WIDTH + SKEW_MAX); tx++) {
+		for (tx = 0; tx < (DISP_WIDTH + (int) SKEW_MAX); tx++) {
 			switch (*(row + tx)) {
 			case 0:
 				console_putc(' ');
@@ -615,7 +615,7 @@ print_digit(int n) {
 			}
 		}
 		printf("\n");
-		row += DIGIT_FB_WIDTH;
+		row += digit_fb_width;
 	}
 	/* END DEBUG CODE */
 }
@@ -640,13 +640,17 @@ generate_digits(void)
 	GFX_CTX	local_gfx;
 	GFX_CTX	*g;
 	uint32_t i;
-	g = gfx_init(&local_gfx, digit_draw_pixel, 
-		DIGIT_FB_WIDTH, DIGIT_FB_HEIGHT, GFX_FONT_LARGE, (void *)digit_fb);
+//define DIGIT_FB_WIDTH 	(int) ((DISP_WIDTH + SKEW_MAX) * 10 + (SEG_THICK + SKEW_MAX) * 2)
+//define DIGIT_FB_HEIGHT (DISP_HEIGHT)
+	digit_fb_width = (int) ((DISP_WIDTH + SKEW_MAX) * 11 + (SEG_THICK + SKEW_MAX) * 2);
+	digit_fb_height = (int) DISP_HEIGHT;
+	digit_fb = malloc(digit_fb_width * digit_fb_height);
 
-	/* Cleared to zero (background) */
-	for (i = 0; i < sizeof(digit_fb); i++) {
-		digit_fb[i] = 0;
-	}
+	g = gfx_init(&local_gfx, digit_draw_pixel, 
+		digit_fb_width, digit_fb_height, GFX_FONT_LARGE, (void *)digit_fb);
+
+	gfx_fill_screen(g, GFX_COLOR_BLACK);
+
 	for (i = 0; i < 10; i++) {
 		draw_digit(g, i * (DISP_WIDTH + SKEW_MAX), 0, i, DIGIT_BODY_COLOR, DIGIT_OUTLINE_COLOR);
 	}
@@ -718,15 +722,15 @@ dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 	if (d < 10) {
 		w = DISP_WIDTH + SKEW_MAX;
 		/* This points to the top left corner of the digit */
-		t = (uint32_t) &(digit_fb[(d % 10) * (DISP_WIDTH + SKEW_MAX)]);
+		t = (uint32_t) &(digit_fb[(d % 10) * (int) (DISP_WIDTH + SKEW_MAX)]);
 	} else if (d == 10) {
 		/* colon comes just past the 10 digits */
 		w = SEG_THICK + SKEW_MAX;
-		t = (uint32_t) &(digit_fb[10 * (DISP_WIDTH + SKEW_MAX)]);
+		t = (uint32_t) &(digit_fb[10 * (int) (DISP_WIDTH + SKEW_MAX)]);
 	} else {
 		/* the decimal point is the character after colon */
 		w = SEG_THICK + SKEW_MAX;
-		t = (uint32_t) &(digit_fb[10 * (DISP_WIDTH + SKEW_MAX) + (w)]);
+		t = (uint32_t) &(digit_fb[10 * (int) (DISP_WIDTH + SKEW_MAX) + (w)]);
 	}
 	/* So this then describes the box size */
 	DMA2D_NLR = DMA2D_SET(NLR, PL, w) | DISP_HEIGHT;
@@ -745,7 +749,7 @@ dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 	 * And finally this is the additional pixels we need to move
 	 * to get to the next line of the pre-rendered digit buffer.
 	 */
-	DMA2D_FGOR = DIGIT_FB_WIDTH - w;
+	DMA2D_FGOR = digit_fb_width - w;
 
 	/*
 	 * And this points to the top left corner of the prerendered
@@ -835,20 +839,23 @@ main(void) {
 	can_switch = 0; /* auto switching every 10 seconds */
 	t0 = mtime();
 	ds = 0;
+#if 0
 /******* TESTING CODE ********/
 	gfx_fill_screen(g, GFX_COLOR_WHITE);
-	draw_digit(g, 100, 100, 8, GFX_COLOR_RED, GFX_COLOR_BLACK);
+	draw_digit(g, 100, 200, 8, GFX_COLOR_RED, GFX_COLOR_BLACK);
 
 	/* In both cases we write the notes using the graphics library */
-	gfx_fill_triangle_at(g, 300, 300, 300, 200, 400, 200, GFX_COLOR_GREEN);
-	gfx_draw_triangle_at(g, 300, 300, 300, 200, 400, 200, GFX_COLOR_RED);
+	gfx_fill_triangle_abs(g, 300, 300, 300, 200, 400, 200, GFX_COLOR_GREEN);
+	gfx_draw_triangle_abs(g, 300, 300, 300, 200, 400, 200, GFX_COLOR_RED);
 	gfx_set_text_color(g, GFX_COLOR_BLACK, GFX_COLOR_BLACK);
 	gfx_set_text_size(g, 3);
 	gfx_set_text_cursor(g, 25, 30 + DISP_HEIGHT + gfx_get_text_height(g) + 2);
 	gfx_puts(g, (char *)"Hello world for DMA2D!");
 	lcd_flip(te_lock);
 	while (1) ;
+/* BUG IS THAT TRIANGLES ARE BROKEN, not relative and not absolute */
 /****************** ####### ***********/
+#endif
 	
 	while (1) {
 		switch (opt) {
@@ -910,7 +917,8 @@ main(void) {
 		}
 		for (i = 0; i < 10; i++) {
 			if (opt < 4) {
-				draw_digit(g, 25 + i * (DISP_WIDTH + 8), 350, i, GFX_COLOR_GREEN, GFX_COLOR_BLACK);
+				draw_digit(g, 25 + i * (DISP_WIDTH + 8), 350, i,
+											GFX_COLOR_GREEN, GFX_COLOR_BLACK);
 			} else {
 				if (ds) {
 					dma2d_digit(35 + i * (DISP_WIDTH + 8), 360, i, SHADOW, SHADOW);
@@ -922,7 +930,7 @@ main(void) {
 		/* In both cases we write the notes using the graphics library */
 		gfx_set_text_color(g, GFX_COLOR_BLACK, GFX_COLOR_BLACK);
 		gfx_set_text_size(g, 3);
-		gfx_set_text_cursor(g, 25, 30 + DISP_HEIGHT + gfx_get_text_height(g) + 2);
+		gfx_set_text_cursor(g, 25, 45 + DISP_HEIGHT + gfx_get_text_height(g) + 2);
 		gfx_puts(g, (char *)"Hello world for DMA2D!");
 		lcd_flip(te_lock);
 		t1 = mtime();
@@ -935,11 +943,13 @@ main(void) {
 		}
 		avg_frame = avg_frame / (float) N_FRAMES;
 		snprintf(buf, 35, "FPS: %6.2f", 1000.0 / avg_frame);
-		gfx_set_text_cursor(g, 25, 30 + DISP_HEIGHT + 2 * (gfx_get_text_height(g) + 2));
+		gfx_set_text_cursor(g, 25, 65 + DISP_HEIGHT + 2 * (gfx_get_text_height(g) + 2));
 		gfx_puts(g, (char *)buf);
-		gfx_puts(g, (char *)" ");
-		gfx_set_text_cursor(g, 25, 30 + DISP_HEIGHT + 3 * (gfx_get_text_height(g) + 2));
-		gfx_puts(g, (char *)scr_opt);
+		gfx_puts(g, (char *)":");
+		gfx_puts(g, "TEST: ");
+		gfx_set_text_cursor(g, 125, 85 + DISP_HEIGHT + 3 * (gfx_get_text_height(g) + 2));
+		printf("Scr opt has '%s' in it\n", scr_opt);
+		gfx_puts(g, scr_opt);
 		/*
 		 * The demo runs continuously but it watches for characters
 		 * typed at the console. There are a few options you can select.
