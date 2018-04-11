@@ -2,15 +2,28 @@
 /*
  * This include file describes the functions exported by clock.c
  */
-#ifndef __UTIL_H
-#define __UTIL_H
+#pragma once
 /*
  * Definitions for clock functions
  */
-void msleep(uint32_t);
-uint32_t mtime(void);
-void clock_setup(void);
+/*
+ *  This define will assemble the various dividers into a set of
+ * bits you can pass to pll_clock_setup.
+ */
+#define PLL_CONFIG_BITS(pllp, plln, pllq, pllm, src)  (\
+		((pllp & RCC_PLLCFGR_PLLP_MASK) << RCC_PLLCFGR_PLLP_SHIFT) |\
+		((plln & RCC_PLLCFGR_PLLN_MASK) << RCC_PLLCFGR_PLLN_SHIFT) |\
+		((pllq & RCC_PLLCFGR_PLLQ_MASK) << RCC_PLLCFGR_PLLQ_SHIFT) |\
+		((pllm & RCC_PLLCFGR_PLLM_MASK) << RCC_PLLCFGR_PLLM_SHIFT) |\
+		((src & RCC_PLLCFGR_PLLSRC_MASK) << RCC_PLLCFGR_PLLSRC_SHIFT) )
 
+void hsi_clock_setup(uint32_t hsi_frequency);
+void hse_clock_setup(uint32_t hse_frequency);
+void pll_clock_setup(uint32_t pll_parameters, uint32_t input_frequency);
+uint32_t clock_setup(uint32_t desired_frequency, uint32_t input_frequency);
+uint32_t mtime(void);
+void msleep(uint32_t millis);
+unsigned char *time_string(uint32_t millis);
 
 /*
  * Our simple console definitions
@@ -238,4 +251,3 @@ void dma2d_draw_32bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel);
 #define DMA2D_COLOR_YELLOW		(DMA2D_COLOR){.argb8888={0x55, 0xff, 0xff, 0xff}}
 #define DMA2D_COLOR_LTYELLOW	(DMA2D_COLOR){.argb8888={0xaa, 0xff, 0xff, 0xff}}
 
-#endif /* generic header protector */

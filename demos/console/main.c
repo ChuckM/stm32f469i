@@ -37,7 +37,7 @@ int main(void)
 	char buf[128];
 	int	len;
 
-	clock_setup(); /* initialize our clock */
+	clock_setup(168000000, 0); /* initialize our clock */
 
 	console_setup(57600);
 
