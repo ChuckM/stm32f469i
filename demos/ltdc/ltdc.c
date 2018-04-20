@@ -17,10 +17,11 @@
 #include <libopencm3/cm3/scb.h>
 #include <gfx.h>
 #include "../util/util.h"
+#include "../util/helpers.h"
 
 #define FB_ADDRESS	0xc0000000
 
-void draw_pixel(int x, int y, uint16_t color);
+void draw_pixel(void *, int x, int y, GFX_COLOR color);
 
 uint32_t *current_buf = (uint32_t *)(0xc0000000);
 
@@ -52,20 +53,14 @@ hard_fault_handler(void)
  *  to the simple graphics library.
  */
 void
-draw_pixel(int x, int y, uint16_t color)
+draw_pixel(void *fb, int x, int y, GFX_COLOR color)
 {
-	int	r, g, b;
 	uint32_t dx, dy;
-	uint32_t *ptr = (uint32_t *)(FB_ADDRESS);
-	uint32_t pixel;
+	uint32_t *ptr = fb;
 
 
 	dx = x; dy = y;
-	r = ((color >> 11) & 0x1f) << 3;
-	g = ((color >> 5) & 0x3f) << 2;
-	b = (color & 0x1f) << 3;
-	pixel = 0xff000000 | (r << 16) | (g << 8) | b;
-	*(ptr + dy * 800U + dx) = pixel;
+	*(ptr + dy * 800U + dx) = color.raw;
 }
 
 /*
@@ -400,6 +395,8 @@ ltdc_layer_setup(uint8_t *fb)
 	LTDC_L1CFBAR = (uint32_t) fb;
 	LTDC_L1CFBLR = LTDC_SET(LxCFBLR, CFBP, (800 * 4)) | LTDC_SET(LxCFBLR, CFBLL, (800 * 4) + 3);
 	LTDC_L1CFBLNR = 480;
+#define LTDC_LxCR_LEN	1
+
 	LTDC_L1CR = LTDC_LxCR_LEN; /* no color key, no lookup table */
 
 	/* immediate load from shadow */
@@ -666,7 +663,7 @@ uint32_t color_bars[] = {
 	0x7f007f
 };
 
-void simple_graphics(void);
+void simple_graphics(GFX_CTX *);
 
 /*
  * This fairly contrived bit exploits my simple graphics library
@@ -675,56 +672,63 @@ void simple_graphics(void);
  * called already.
  */
 void
-simple_graphics(void)
+simple_graphics(GFX_CTX *g)
 {
 	/* pick the 7 x 9 font (8 x 12 font box) */
-	gfx_setFont(GFX_FONT_LARGE);
-	gfx_fillScreen(GFX_COLOR_BLACK);
-	gfx_fillRoundRect(0, 0, 800, 480, 15, (uint16_t) GFX_COLOR_WHITE);
-	gfx_drawRoundRect(0, 0, 800, 480, 15, (uint16_t) GFX_COLOR_RED);
+	gfx_set_font(g, GFX_FONT_LARGE);
+	gfx_fill_screen(g, GFX_COLOR_BLACK);
+	gfx_move_to(g, 0, 0);
+	gfx_fill_rounded_rectangle(g, 800, 480, 15, GFX_COLOR_WHITE);
+	gfx_draw_rounded_rectangle(g, 800, 480, 15, GFX_COLOR_RED);
 
 	/* Yellow on blue characters and make it 2x bigger (16 x 24 font box) */
-	gfx_setTextColor(GFX_COLOR_YELLOW, GFX_COLOR_BLUE);
-	gfx_setTextSize(2);
-	gfx_fillRoundRect(236, 100, 20*16+7, 24+8, 10, (uint16_t) GFX_COLOR_BLUE);
-	gfx_drawRoundRect(235, 100, 20*16+7, 24+8, 10, (uint16_t) GFX_COLOR_YELLOW);
+	gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_BLUE);
+	gfx_set_text_size(g, 2);
+	gfx_move_to(g, 236, 100);
+	gfx_fill_rounded_rectangle(g, 20*16+7, 24+8, 10, GFX_COLOR_BLUE);
+	gfx_move_to(g, 235, 100);
+	gfx_draw_rounded_rectangle(g, 20*16+7, 24+8, 10, GFX_COLOR_YELLOW);
 
-	gfx_setCursor(236+5, 100+24);
-	gfx_puts((unsigned char *) "Simple Graphics Demo");
+	gfx_set_text_cursor(g, 236+5, 100+24);
+	gfx_puts(g, "Simple Graphics Demo");
 
-	gfx_fillCircle(230, 200, 50, GFX_COLOR_RED);
-	gfx_fillTriangle(310, 250, 360, 150, 410, 250, GFX_COLOR_GREEN);
-	gfx_fillRect(180, 280, 100, 100, GFX_COLOR_BLUE);
+	gfx_move_to(g, 230, 200);
+	gfx_fill_circle(g, 50, GFX_COLOR_RED);
+	gfx_fill_triangle_abs(g, 310, 250, 360, 150, 410, 250, GFX_COLOR_GREEN);
+	gfx_move_to(g, 180, 280);
+	gfx_fill_rectangle(g, 100, 100, GFX_COLOR_BLUE);
 	/* check for proper edge filling on adjacent triangles */
-	gfx_fillTriangle(310, 380, 310, 280, 410, 280, GFX_COLOR_RED);
-	gfx_fillTriangle(310, 380, 410, 280, 410, 380, GFX_COLOR_GREEN);
+	gfx_fill_triangle_abs(g, 310, 380, 310, 280, 410, 280, GFX_COLOR_RED);
+	gfx_fill_triangle_abs(g, 310, 380, 410, 280, 410, 380, GFX_COLOR_GREEN);
 
-	gfx_drawLine(180, 264, 410, 264, GFX_COLOR_BLACK);
-	gfx_drawLine(180, 265, 410, 265, GFX_COLOR_BLACK);
-	gfx_drawLine(180, 266, 410, 266, GFX_COLOR_BLACK);
+	gfx_draw_line_abs(g, 180, 264, 410, 264, GFX_COLOR_BLACK);
+	gfx_draw_line_abs(g, 180, 265, 410, 265, GFX_COLOR_BLACK);
+	gfx_draw_line_abs(g, 180, 266, 410, 266, GFX_COLOR_BLACK);
 
-	gfx_drawLine(294, 150, 294, 380, GFX_COLOR_BLACK);
-	gfx_drawLine(295, 150, 295, 380, GFX_COLOR_BLACK);
-	gfx_drawLine(296, 150, 296, 380, GFX_COLOR_BLACK);
+	gfx_draw_line_abs(g, 294, 150, 294, 380, GFX_COLOR_BLACK);
+	gfx_draw_line_abs(g, 295, 150, 295, 380, GFX_COLOR_BLACK);
+	gfx_draw_line_abs(g, 296, 150, 296, 380, GFX_COLOR_BLACK);
 
-	gfx_setTextColor(0, 0);
-	gfx_setTextRotation(GFX_ROT_90);
-	gfx_setCursor(550, 150);
-	gfx_puts((unsigned char *) "Rotated Text");
-	gfx_setFont(GFX_FONT_SMALL);
-	gfx_setCursor(520, 150);
-	gfx_puts((unsigned char *) "And two distinct fonts");
-	gfx_setTextRotation(GFX_ROT_0);
-	gfx_setTextSize(1);
-	gfx_setCursor(180, 420);
-	gfx_puts((unsigned char *) "At scale = 1, small font is hard to read.");
+	gfx_set_text_color(g, GFX_COLOR_BLACK, GFX_COLOR_BLACK);
+	gfx_set_text_rotation(g, -90);
+	gfx_set_text_cursor(g, 550, 150);
+	gfx_puts(g, "Rotated Text");
+	gfx_set_font(g, GFX_FONT_SMALL);
+	gfx_set_text_cursor(g, 520, 150);
+	gfx_puts(g, "And two distinct fonts");
+	gfx_set_text_rotation(g, 0);
+	gfx_set_text_size(g, 1);
+	gfx_set_text_cursor(g, 180, 420);
+	gfx_puts(g, "At scale = 1, small font is hard to read.");
+	printf("Flip\n");
+	flip(0);
 
 }
 
-void animation_test(int lock);
+void animation_test(GFX_CTX *g, int lock);
 
 void
-animation_test(int lock)
+animation_test(GFX_CTX *g, int lock)
 {
 	int i, r1, r2, x, y;
 	uint32_t *buf = (uint32_t *)(FB_ADDRESS);
@@ -733,9 +737,10 @@ animation_test(int lock)
 
 	r1 = 0;
 	r2 = 0;
-	gfx_setTextColor(GFX_COLOR_YELLOW, 0);
-	gfx_setFont(GFX_FONT_LARGE);
-	gfx_setTextSize(2);
+	gfx_move_to(g, 0, 0);
+	gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_BLACK);
+	gfx_set_font(g, GFX_FONT_LARGE);
+	gfx_set_text_size(g, 2);
 	t0 = t1 = mtime();
 	snprintf(fps, 25, "*** FPS");
 	while (console_getc(0) == 0) {
@@ -743,17 +748,21 @@ animation_test(int lock)
 			*(buf + i) = 0xff000000;
 		}
 		/* gfx_fillScreen(0x0); */
-		gfx_setCursor(250, 100);
-		gfx_puts((unsigned char *)"Some Planets");
-		gfx_fillCircle(400, 240, 50, GFX_COLOR_BLUE);
+		gfx_move_to(g, 0, 0);
+		gfx_set_text_cursor(g, 250, 100);
+		gfx_puts(g, "Some Planets");
+		gfx_move_to(g, 400, 240);
+		gfx_fill_circle(g, 50, GFX_COLOR_BLUE);
 		r1 = (r1 + 12) % 360;
 		r2 = (r2 + 6) % 360;
 		x = sin((float) r1 / 180.0 * 3.14159) * 100;
 		y = cos((float) r1 / 180.0 * 3.14159) * 100;
-		gfx_fillCircle(400 + x, 240 + y, 15, 0x7bef);
+		gfx_move_to(g, 400 + x, 240 + y);
+		gfx_fill_circle(g, 15, GFX_COLOR_CYAN);
 		x = sin((float) r2 / 180.0 * 3.14159) * 150;
 		y = cos((float) r2 / 180.0 * 3.14159) * 150;
-		gfx_fillCircle(400 + x, 240 + y, 25, GFX_COLOR_RED);
+		gfx_move_to(g, 400 + x, 240 + y);
+		gfx_fill_circle(g, 25, GFX_COLOR_RED);
 		/* every 60 frames this hits 0 */
 		if (r2 == 0) {
 			t1 = mtime();
@@ -762,8 +771,8 @@ animation_test(int lock)
 			/* delta t is in milliseconds, so 1000 * 60 / dt = FPS */
 			snprintf(fps, 25, "%5.2f FPS", 60000.0 / (float) (dt));
 		}
-		gfx_setCursor(500, 400);
-		gfx_puts((unsigned char *) fps);
+		gfx_set_text_cursor(g, 500, 400);
+		gfx_puts(g, fps);
 		flip(lock);
 	}
 }
@@ -867,6 +876,8 @@ main(void)
 	unsigned int	i;
 	uint32_t	*buf = (uint32_t *)(FB_ADDRESS);
 	uint32_t	col;
+	GFX_CTX glocal;
+	GFX_CTX		*g;
 
 	uint32_t	*test_buf;
 	uint32_t	test_val;
@@ -879,8 +890,8 @@ main(void)
 	 * image frame buffer with a white grid on a black
 	 * background.
 	 */
-	gfx_init(draw_pixel, 800, 480, GFX_FONT_LARGE);
-	simple_graphics();
+	g = gfx_init(&glocal, draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FB_ADDRESS);
+	simple_graphics(g);
 
 	this_lcd_init((uint8_t *)FB_ADDRESS);
 
@@ -902,11 +913,11 @@ main(void)
 			switch (xc) {
 			case 'A':
 				printf("Animation test (TE unlocked).\n");
-				animation_test(0);
+				animation_test(g, 0);
 				break;
 			case 'a':
 				printf("Animation test (TE locked).\n");
-				animation_test(1);
+				animation_test(g, 1);
 				break;
 
 			case 'C':
@@ -927,7 +938,7 @@ main(void)
 			case 't':
 				/* This is pretty contrived, just to show the primitives */
 				printf("GFX Test Output\n");
-				simple_graphics();
+				simple_graphics(g);
 				break;
 			case 'e':
 				/* memory explorer */
