@@ -677,25 +677,25 @@ simple_graphics(GFX_CTX *g)
 	/* pick the 7 x 9 font (8 x 12 font box) */
 	gfx_set_font(g, GFX_FONT_LARGE);
 	gfx_fill_screen(g, GFX_COLOR_BLACK);
-	gfx_move(g, 0, 0);
+	gfx_move_to(g, 0, 0);
 	gfx_fill_rounded_rectangle(g, 800, 480, 15, GFX_COLOR_WHITE);
 	gfx_draw_rounded_rectangle(g, 800, 480, 15, GFX_COLOR_RED);
 
 	/* Yellow on blue characters and make it 2x bigger (16 x 24 font box) */
 	gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_BLUE);
 	gfx_set_text_size(g, 2);
-	gfx_move(g, 236, 100);
+	gfx_move_to(g, 236, 100);
 	gfx_fill_rounded_rectangle(g, 20*16+7, 24+8, 10, GFX_COLOR_BLUE);
-	gfx_move(g, 235, 100);
+	gfx_move_to(g, 235, 100);
 	gfx_draw_rounded_rectangle(g, 20*16+7, 24+8, 10, GFX_COLOR_YELLOW);
 
 	gfx_set_text_cursor(g, 236+5, 100+24);
 	gfx_puts(g, "Simple Graphics Demo");
 
-	gfx_move(g, 230, 200);
+	gfx_move_to(g, 230, 200);
 	gfx_fill_circle(g, 50, GFX_COLOR_RED);
 	gfx_fill_triangle_abs(g, 310, 250, 360, 150, 410, 250, GFX_COLOR_GREEN);
-	gfx_move(g, 180, 280);
+	gfx_move_to(g, 180, 280);
 	gfx_fill_rectangle(g, 100, 100, GFX_COLOR_BLUE);
 	/* check for proper edge filling on adjacent triangles */
 	gfx_fill_triangle_abs(g, 310, 380, 310, 280, 410, 280, GFX_COLOR_RED);
@@ -710,7 +710,7 @@ simple_graphics(GFX_CTX *g)
 	gfx_draw_line_abs(g, 296, 150, 296, 380, GFX_COLOR_BLACK);
 
 	gfx_set_text_color(g, GFX_COLOR_BLACK, GFX_COLOR_BLACK);
-	gfx_set_text_rotation(g, 90);
+	gfx_set_text_rotation(g, -90);
 	gfx_set_text_cursor(g, 550, 150);
 	gfx_puts(g, "Rotated Text");
 	gfx_set_font(g, GFX_FONT_SMALL);
@@ -720,7 +720,8 @@ simple_graphics(GFX_CTX *g)
 	gfx_set_text_size(g, 1);
 	gfx_set_text_cursor(g, 180, 420);
 	gfx_puts(g, "At scale = 1, small font is hard to read.");
-		flip(0);
+	printf("Flip\n");
+	flip(0);
 
 }
 
@@ -736,6 +737,7 @@ animation_test(GFX_CTX *g, int lock)
 
 	r1 = 0;
 	r2 = 0;
+	gfx_move_to(g, 0, 0);
 	gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_BLACK);
 	gfx_set_font(g, GFX_FONT_LARGE);
 	gfx_set_text_size(g, 2);
@@ -746,19 +748,20 @@ animation_test(GFX_CTX *g, int lock)
 			*(buf + i) = 0xff000000;
 		}
 		/* gfx_fillScreen(0x0); */
+		gfx_move_to(g, 0, 0);
 		gfx_set_text_cursor(g, 250, 100);
 		gfx_puts(g, "Some Planets");
-		gfx_move(g, 400, 240);
+		gfx_move_to(g, 400, 240);
 		gfx_fill_circle(g, 50, GFX_COLOR_BLUE);
 		r1 = (r1 + 12) % 360;
 		r2 = (r2 + 6) % 360;
 		x = sin((float) r1 / 180.0 * 3.14159) * 100;
 		y = cos((float) r1 / 180.0 * 3.14159) * 100;
-		gfx_move(g, 400 + x, 240 + y);
+		gfx_move_to(g, 400 + x, 240 + y);
 		gfx_fill_circle(g, 15, GFX_COLOR_CYAN);
 		x = sin((float) r2 / 180.0 * 3.14159) * 150;
 		y = cos((float) r2 / 180.0 * 3.14159) * 150;
-		gfx_move(g, 400 + x, 240 + y);
+		gfx_move_to(g, 400 + x, 240 + y);
 		gfx_fill_circle(g, 25, GFX_COLOR_RED);
 		/* every 60 frames this hits 0 */
 		if (r2 == 0) {
@@ -887,7 +890,7 @@ main(void)
 	 * image frame buffer with a white grid on a black
 	 * background.
 	 */
-	g = gfx_init(&glocal, draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAMEBUFFER_ADDRESS);
+	g = gfx_init(&glocal, draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FB_ADDRESS);
 	simple_graphics(g);
 
 	this_lcd_init((uint8_t *)FB_ADDRESS);

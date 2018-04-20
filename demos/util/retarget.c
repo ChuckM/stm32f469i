@@ -131,7 +131,7 @@ _read (int fd, char *ptr, int len)
 __attribute__((constructor))
 static void SystemInit()
 {
-	clock_setup();
+	clock_setup(180000000, 8000000);
 	/* Sadly the "virtual" COM port that ST provides
 	 * on the ST-Link is unable to keep up at 115,200
 	 */
