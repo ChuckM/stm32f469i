@@ -58,6 +58,7 @@ osc_on(enum rcc_osc osc)
 		break;
 	case RCC_LSI:
 		RCC_CSR |= RCC_CSR_LSION;
+	default:
 		break;
 	}
 
@@ -77,6 +78,7 @@ osc_on(enum rcc_osc osc)
 		break;
 	case RCC_LSI:
 		while ((RCC_CSR & RCC_CSR_LSIRDY) == 0);
+	default:
 		break;
 	}
 }
@@ -98,6 +100,7 @@ static inline void osc_off(enum rcc_osc osc)
 		break;
 	case RCC_LSI:
 		RCC_CSR &= ~RCC_CSR_LSION;
+	default:
 		break;
 	}
 }
