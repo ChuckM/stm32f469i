@@ -10,12 +10,24 @@
  *  This define will assemble the various dividers into a set of
  * bits you can pass to pll_clock_setup.
  */
-#define PLL_CONFIG_BITS(pllp, plln, pllq, pllm, src)  (\
+#define PLL_CONFIG_BITS(pllr, pllp, plln, pllq, pllm, src)  (\
+		((pllr & RCC_PLLCFGR_PLLR_MASK) << RCC_PLLCFGR_PLLR_SHIFT) |\
 		((pllp & RCC_PLLCFGR_PLLP_MASK) << RCC_PLLCFGR_PLLP_SHIFT) |\
 		((plln & RCC_PLLCFGR_PLLN_MASK) << RCC_PLLCFGR_PLLN_SHIFT) |\
 		((pllq & RCC_PLLCFGR_PLLQ_MASK) << RCC_PLLCFGR_PLLQ_SHIFT) |\
 		((pllm & RCC_PLLCFGR_PLLM_MASK) << RCC_PLLCFGR_PLLM_SHIFT) |\
 		((src & RCC_PLLCFGR_PLLSRC_MASK) << RCC_PLLCFGR_PLLSRC_SHIFT) )
+
+struct pll_parameters {
+	int pllr;
+	int pllm;
+	int plln;
+	int pllp;
+	int pllp_real;
+	int pllq;
+	int src;
+};
+struct pll_parameters *dump_clock(void);
 
 void hsi_clock_setup(uint32_t hsi_frequency);
 void hse_clock_setup(uint32_t hse_frequency);
