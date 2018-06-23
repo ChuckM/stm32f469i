@@ -14,7 +14,6 @@
 #include <libopencm3/stm32/dma2d.h>
 #include <math.h>
 #include <gfx.h>
-
 #include "../util/util.h"
 #include "reticle.h"
 

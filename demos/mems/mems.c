@@ -1,10 +1,7 @@
 /*
- * MEMs demo
+ * MEMs driver
  *
- * Copyright (C) 2016 Chuck McManis, All rights reserved.
- *
- * This demo shows off the MEMs microphone that is on
- * the STM32F469-DISCOVERY board.
+ * Copyright (C) 2017 Chuck McManis, All rights reserved.
  */
 
 #include <stdio.h>
@@ -12,181 +9,133 @@
 #include <string.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
-#include <libopencm3/stm32/dma2d.h>
+#include <libopencm3/stm32/spi.h>
+#include <libopencm3/stm32/timer.h>
 #include <math.h>
 #include <gfx.h>
 
 #include "../util/util.h"
-#include "signal.h"
-#include "reticle.h"
+#include "mems.h"
+
+/*
+ * Enable this flag to configure as an I2S device, if it
+ * is not defined we configure as a SPI device.
+ */
+// #define USE_I2S
+
 /*
  * MEMS Setup
  * -------------------------------------------------------
  */
 
-#define SAMP_SIZE	1024
-#define	SAMP_RATE	8192
+void
+mems_init()
+{
+	rcc_periph_clock_enable(RCC_SPI3);
+	rcc_periph_clock_enable(RCC_TIM4);
+	rcc_periph_clock_enable(RCC_GPIOD);
+	gpio_mode_setup(GPIOD, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO13);
+	/* Setting I/O pin to input  allows it to go up and down as expected */
+/*
+	gpio_mode_setup(GPIOD, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO6);
+*/
+	/* TEST XXX mode, lets just read the pin and see what we see */
+	gpio_mode_setup(GPIOD, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO6);
+	gpio_mode_setup(GPIOD, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO13);
+	return;
+	/* XXX END test mode */
 
-void printvp(GFX_VIEW *vp);
+	/* Experiement, set input and also set the AF pins */
+	gpio_set_af(GPIOD, GPIO_AF5, GPIO6); /* SPI 3 */
+	gpio_set_af(GPIOD, GPIO_AF2, GPIO13); /* TIM4 */
+
+	/*
+	 * Set up the timer to generate a PCLK/16 clock.
+	 */
+	RCC_DCKCFGR |= RCC_DCKCFGR_TIMPRE;
+	/* Output on CH2, mode toggle */
+	TIM4_CCMR1 = TIM_CCMR1_OC2CE | TIM_CCMR1_OC2M_TOGGLE;
+	/* Enable this timer channel 2 */
+	TIM4_CCER = TIM_CCER_CC2E;
+	/* ARR is (Delay - 1) */
+	TIM4_ARR = 15;
+	/* Clock toggle is right at the point where it resets */
+	TIM4_CCR2 = 0;
+	TIM4_CR1 = TIM_CR1_CEN;
+
+#ifndef USE_I2S
+	/*
+ 	 * Set up SPI3 so that we can read data coming in
+	 * from the microphone using a PCLK/16 clock rate
+	 * Which in this case is 2.8125 Mhz (45Mhz / 16)
+	 * Because the microphone data line is connected to MOSI
+	 * (aka master OUT and slave IN) and we don't have a
+	 * way to feed SPI a clock, we resort to "Bi Directional"
+	 * mode as a master, with the MOSI pin becomes an input
+	 * when we're 'read' mode.
+	 * We also configure it for 16 bit I/O because the I2S
+	 * forces 16 bit I/O and this makes them the same.
+	 */
+
+#define SPI_FLAGS (SPI_CR1_MSTR | SPI_CR1_SSI |\
+				   SPI_CR1_BAUDRATE_FPCLK_DIV_16 |\
+				   SPI_CR1_DFF | SPI_CR1_BIDIMODE)
+	SPI_CR2(SPI3) = SPI_CR2_SSOE;
+	SPI_CR1(SPI3) = SPI_FLAGS;
+	SPI_CR1(SPI3) |= SPI_CR1_SPE;
+	/* if we generate a mode failure, rewrite CR1 to reset */
+	if (SPI_SR(SPI3) & SPI_SR_MODF) {
+		SPI_CR1(SPI3) = SPI_FLAGS;
+	}
+	/* At this point every byte we 'transmit' on SPI3 will clock in 8 bits
+	 * from the MEMS microphone */
+#else
+	SPI_I2SCFGR(SPI3) = SPI_I2SCFGR_I2SMOD |
+						(SPI_I2SCFGR_I2SCFG_MASTER_RECEIVE << 8) |
+						(SPI_I2SCFGR_I2SSTD_LSB_JUSTIFIED << 4);
+	SPI_I2SPR(SPI3) = 12 | SPI_I2SPR_MCKOE;
+	SPI_I2SCFGR(SPI3) |= SPI_I2SCFGR_I2SE;
+#endif
+}
+
+/*
+ * bit banded addresses
+ */
+
+#define GPIO_BASE(x) (GPIOA + ((((uint32_t)(x) >> 4) & 0xf) << 10))
+#define GPIO_BIT(x)	(x % 16)
+#define GPIO_MASK(x) (1 << ((uint32_t)(x) % 16))
+
+int
+get_bit(int pin)
+{
+	/* Bit banded addresses let you read and write a single bit
+	 * as it if were a byte.
+	 * GPIOD base address is 0x40020c00
+	 */
+	int bit = GPIO_BIT(pin);
+	int addr = ((GPIO_BASE(pin) + 0x10) - 0x40000000);
+	if (bit > 7) {
+		addr++;
+		bit -= 8;
+	}
+	return *(int *)((addr * 32 + bit * 4) + 0x42000000U);
+}
 
 void
-printvp(GFX_VIEW *vp)
+put_bit(int pin, int val)
 {
-	printf("VP: [min_x, min_y], [max_x, max_y] = [%f, %f], [%f, %f]\n",
-				vp->min_x, vp->min_y, vp->max_x, vp->max_y);
+	/* Bit banded addresses let you read and write a single bit
+	 * as it if were a byte.
+	 * GPIOD base address is 0x40020c00
+	 */
+	int bit = GPIO_BIT(pin);
+	int addr = ((GPIO_BASE(pin) + 0x10) - 0x40000000);
+	if (bit > 7) {
+		addr++;
+		bit -= 8;
+	}
+	*(int *)((addr * 32 + bit * 4) + 0x42000000U) = val;
+	return;
 }
 
-/* This points at the bit banded address of PD6 */
-int *pd6 = (int *)(0x42000000U + ((((GPIOD - GPIOA)) + 0x10) * 32) + (6 * 4));
-/*
- * Lets see if we can look at MEMs microphones
- * Mems microphone comes in on
- * PD6 (SPI3 MOSI/5) (SAI1_SDA/6) (USART2 RX/7) (FMC_NWAIT/12) (DCMI_D10/13) (LCD_B2/14)
- * MEMs clock is on
- * PD13 (TM4_CH2/2) (QUADSPI_BK1_IO3/9) (FMC_A18/12)
- * So somehow we use timer 4 to clock USART2 in a synchronous mode to get microphone data.
- *
- */
-int
-main(void) {
-	int i, frame_cnt, bins;
-	uint32_t t0, t1;
-	sample_buffer *signal, *mag0;
-	reticle_t *reticle;
-	GFX_CTX	*g;
-	GFX_VIEW *vp;
-	GFX_VIEW local_vp;
-
-	signal = alloc_buf(1024);
-	mag0 = alloc_buf(1024);
-
-	/* Enable the clock to the DMA2D device */
-	rcc_periph_clock_enable(RCC_DMA2D);
-	rcc_periph_clock_enable(RCC_GPIOD);
-	gpio_mode_setup(GPIOD, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO13);
-	gpio_mode_setup(GPIOD, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO6);
-
-	fprintf(stderr, "FFT Exploration Demo program V2.2\n");
-
-	g = gfx_init(NULL, lcd_draw_pixel, 800, 480, GFX_FONT_LARGE,
-										(void *)FRAMEBUFFER_ADDRESS);
-
-	printf("Frame buffer address is : 0x%x\n", FRAMEBUFFER_ADDRESS);
-
-	reticle = create_reticle("RF Power", 640, 480, GFX_FONT_LARGE,
-		"Frequency", 0, 512, 
-		"Power", -120, 0);
-	vp = gfx_viewport(&local_vp, g, reticle->o_x + 2, reticle->o_y + 2,
-									reticle->b_w - 4, reticle->b_h - 4,
-			0, 0, reticle->b_w - 4, 1.0);
-
-	dma2d_clear(&lcd_screen, DMA2D_COLOR_BLACK); /* option 1 this does not work? */
-	dma2d_render(&(reticle->bm), &lcd_screen, 0, 0);
-
-	/* fill signal buffer with test data */
-	// add_triangle(signal, 110.0, 1.0);
-	// add_cos(signal, 400.0, 1.5);
-/*
-	high res wave
-	box-w (number of increments)
-	150hz is our slowest wave
-	1/150 is one cycle, times 2*pi, divided by number of bits
- */
-	signal->r = (150 * reticle->b_w) / (2 * M_PI) ;
-	add_cos(signal, 150.0, 1.0);
-	add_cos(signal, 300.0, 1.0);
-	// add_cos(signal, 600.0, 1.5);
-
-	/*
-	 * show our original signal
-	 */
-#define ONE_WAVE reticle->b_w
-	
-	vp_rescale(vp, 0, signal->sample_min, ONE_WAVE, signal->sample_max);
-	for (i = 1; i < ONE_WAVE; i++) {
-		vp_plot(vp, i - 1, *(signal->data + (i -1)),
-					    i, *(signal->data + i), GFX_COLOR_DKGREEN);
-	}
-	lcd_flip(0);
-
-	frame_cnt = 0;
-	vp_rescale(vp, 0, -1.0, 1024, 1.0);
-	while (1) {
-		reset_minmax(signal);
-		dma2d_clear(&lcd_screen, DMA2D_COLOR_BLACK); /* option 1 this does not work? */
-		dma2d_render(&(reticle->bm), &lcd_screen, 0, 0); 
-		printf("%d\n", frame_cnt++);
-		t0 = mtime();
-		for (i = 0; i < 1024; i++) {
-			signal->data[i] = 0;
-#define SAMPLE_MAX_BITS	256
-			for (int k = 0; k < SAMPLE_MAX_BITS; k++) {
-				gpio_clear(GPIOD, GPIO13);
-				gpio_set(GPIOD, GPIO13);
-				signal->data[i] += *pd6;
-			}
-			signal->data[i] = signal->data[i] / 256;
-			set_minmax(signal, i);
-		}
-		t1 = mtime();
-		printf("Sample time: %d mS\n", t1 - t0);
-		for (i = 1; i < 1024; i++) {
-			vp_plot(vp, i-1, signal->data[i-1], i, signal->data[i], GFX_COLOR_YELLOW);
-		}
-		gfx_set_text_size(g, 2);
-		gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_YELLOW);
-		gfx_set_text_cursor(g, reticle->o_x + 5,
-						   reticle->o_y+15 + gfx_get_text_height(g));
-		gfx_puts(g, "FFT");
-		printf("Signal min/max %f/%f\n", signal->sample_min, signal->sample_max);
-		lcd_flip(0);
-		msleep(1000);
-	}
-
-				
-
-	/* fill signal buffer with test data */
-	// add_triangle(signal, 110.0, 1.0);
-	// add_cos(signal, 400.0, 1.5);
-	clear_samples(signal);
-	signal->r = 512;
-	add_cos(signal, 150.0, 1.0);
-	add_cos(signal, 300.0, 1.0);
-	add_cos(signal, 146.0, 1.0);
-	add_cos(signal, 148.1, 1.0);
-	add_cos(signal, 144.2, 1.0);
-	add_cos(signal, 150.3, 1.0);
-	add_cos(signal, 152.4, 1.0);
-	add_cos(signal, 154.5, 1.0);
-	add_cos(signal, 156.6, 1.0);
-	add_cos(signal, 300.0, 1.0);
-
-
-
-	/*
-	 * Apply the DFT and compute real and imaginary
-	 * components.
-	 */
-
-	bins = 1024;
-	t0 = mtime();
-	calc_fft(signal, bins, mag0);
-	t1 = mtime();
-	printf("FFT Compute time %ld milliseconds\n", t1 - t0);
-
-	/* Need a better way to 'label' these viewports */
-	gfx_set_text_size(g, 2);
-	gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_YELLOW);
-	gfx_set_text_cursor(g, reticle->o_x + 5,
-						   reticle->o_y+15 + gfx_get_text_height(g));
-	gfx_puts(g, "FFT");
-
-	vp_rescale(vp, 0, mag0->sample_min, (float) bins/2, mag0->sample_max);
-	printvp(vp);
-	for (i = 1; i < bins/2; i++) {
-		vp_plot(vp, i - 1, mag0->data[i - 1],
-				    i, mag0->data[i], GFX_COLOR_YELLOW);
-	}
-	lcd_flip(0);
-	while (1) ;
-}

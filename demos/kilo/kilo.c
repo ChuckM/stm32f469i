@@ -37,7 +37,6 @@
 #define _BSD_SOURCE
 #define _GNU_SOURCE
 
-// #include <termios.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -45,11 +44,10 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <sys/types.h>
-// #include <sys/ioctl.h>
-#include <sys/time.h>
 #include <unistd.h>
 #include <stdarg.h>
 #include <fcntl.h>
+#include "../util/util.h"
 
 /* Syntax highlight types */
 #define HL_NORMAL 0
@@ -185,24 +183,13 @@ struct editorSyntax HLDB[] = {
 
 /* ======================= Low level terminal handling ====================== */
 
-static struct termios orig_termios; /* In order to restore at exit.*/
-
-void disableRawMode(int fd) {
-    /* Don't even check the return value as it's too late. */
-    if (E.rawmode) {
-        tcsetattr(fd,TCSAFLUSH,&orig_termios);
-        E.rawmode = 0;
-    }
-}
-
 /* Called at exit to avoid remaining in raw mode. */
 void editorAtExit(void) {
-    disableRawMode(STDIN_FILENO);
+	/* nothing to do here */
 }
 
 /* Raw mode: 1960 magic shit. */
 int enableRawMode(int fd) {
-    struct termios raw;
 
     if (E.rawmode) return 0; /* Already enabled. */
     if (!isatty(STDIN_FILENO)) goto fatal;
@@ -233,6 +220,7 @@ fatal:
     errno = ENOTTY;
     return -1;
 }
+xxx
 
 /* Read a key from the terminal put in raw mode, trying to handle
  * escape sequences. */
