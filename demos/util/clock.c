@@ -1,12 +1,14 @@
 /*
  * Easier to use clock functions
  */
+#include <stdio.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/pwr.h>
 #include <libopencm3/stm32/flash.h>
 #include <libopencm3/cm3/systick.h>
 #include <libopencm3/cm3/nvic.h>
 #include "../util/util.h"
+#include "../util/helpers.h"
 
 /* Various bit streams not currently defined in rcc.h */
 #define RCC_PLLCFGR_PLLQ_MASK			0xf
@@ -27,14 +29,7 @@
 /* The internal clock frequency on the F4 chip */
 #define HSI_FREQUENCY		16000000
 
-struct pll_parameters {
-	int pllm;
-	int plln;
-	int pllp;
-	int pllp_real;
-	int pllq;
-	int src;
-} _clock_parameters;
+struct pll_parameters _clock_parameters;
 
 
 /*
@@ -274,7 +269,7 @@ void
 pll_clock_setup(uint32_t pll_bits, uint32_t input_freq)
 {
 	uint32_t flash_ws;
-	uint32_t apb1_div;
+	uint32_t apb_div;
 
 	/* First make sure we won't halt, switch to generic HSI mode */
 	hsi_clock_setup(HSI_FREQUENCY);
@@ -299,18 +294,30 @@ pll_clock_setup(uint32_t pll_bits, uint32_t input_freq)
 
 	/* Set APB2 and APB1 to maximum frequency possible given this HCLK */
 	/* NB: Assumes internal clock < 200Mhz, APB2 max 100Mhz */
-	if (rcc_ahb_frequency > RCC_APB2_MAX_CLOCK) {
-		set_ppre2(RCC_CFGR_PPRE_DIV_NONE);
-		/* rcc_apb2_frequency = freq; */
-		rcc_apb2_frequency = rcc_ahb_frequency;
-	} else {
-		set_ppre2(RCC_CFGR_PPRE_DIV_2);
-		rcc_apb2_frequency = rcc_ahb_frequency >> 1;
+	apb_div = (rcc_ahb_frequency + (RCC_APB2_MAX_CLOCK - 1)) / RCC_APB2_MAX_CLOCK;
+	switch (apb_div) {
+		case 1:
+			set_ppre2(RCC_CFGR_PPRE_DIV_NONE);
+			/* rcc_apb2_frequency = freq; */
+			rcc_apb2_frequency = rcc_ahb_frequency;
+			break;
+		case 2:
+			set_ppre2(RCC_CFGR_PPRE_DIV_2);
+			rcc_apb2_frequency = rcc_ahb_frequency >> 1;
+			break;
+		case 3:
+			set_ppre2(RCC_CFGR_PPRE_DIV_4);
+			rcc_apb2_frequency = rcc_ahb_frequency >> 2;
+			break;
+		default:
+			set_ppre2(RCC_CFGR_PPRE_DIV_8);
+			rcc_apb2_frequency = rcc_ahb_frequency >> 3;
+			break;
 	}
 
 	/* This rounds up to the smallest safe divisor */
-	apb1_div = (rcc_ahb_frequency + (RCC_APB1_MAX_CLOCK - 1)) / RCC_APB1_MAX_CLOCK;
-	switch (apb1_div) {
+	apb_div = (rcc_ahb_frequency + (RCC_APB1_MAX_CLOCK - 1)) / RCC_APB1_MAX_CLOCK;
+	switch (apb_div) {
 		case 1:
 			set_ppre1(RCC_CFGR_PPRE_DIV_NONE);
 			rcc_apb1_frequency = rcc_ahb_frequency;
@@ -357,7 +364,7 @@ static uint32_t compute_pll_bits(int desired_frequency, int input_frequency);
 static uint32_t
 compute_pll_bits(int desired_frequency, int input_frequency)
 {
-	uint32_t pllm, plln, pllq, pllp, vco;
+	uint32_t pllr, pllm, plln, pllq, pllp, vco;
 	int i, src;
 
 	src = 1;
@@ -410,13 +417,16 @@ compute_pll_bits(int desired_frequency, int input_frequency)
 		/* not sure what the right answer here is, the chip will work but USB won't */
 		warn("won't work for USB\n");
 	}
+
+	pllr = vco / 60000000;
+	_clock_parameters.pllr = pllr;
 	_clock_parameters.pllm = pllm;
 	_clock_parameters.plln = plln;
 	_clock_parameters.pllp = pllp;
 	_clock_parameters.pllq = pllq;
 	_clock_parameters.pllp_real = ((pllp / 2) - 1);
 	_clock_parameters.src = src;
-	return (PLL_CONFIG_BITS(((pllp / 2) - 1), plln, pllq, pllm, src));
+	return (PLL_CONFIG_BITS(pllr, ((pllp / 2) - 1), plln, pllq, pllm, src));
 }
 
 /* Set up a timer to create 1mS ticks. */
@@ -446,6 +456,8 @@ clock_setup(uint32_t desired_frequency, uint32_t hse_frequency) {
 	} else {
 		uint32_t cfgr_bits;
 		cfgr_bits = compute_pll_bits(desired_frequency, hse_frequency);
+		/* debug test XXX: FIXME!*/
+		cfgr_bits = 0x66405a08;
 		pll_clock_setup(cfgr_bits, hse_frequency);
 	}
 	systick_setup(1000);
@@ -520,3 +532,39 @@ time_string(uint32_t t)
     time_string[13] = 0;
     return &time_string[0];
 }
+
+struct pll_parameters *
+dump_clock(void)
+{
+	static struct pll_parameters p;
+
+	uint32_t reg = RCC_PLLCFGR;
+	p.pllr = RCC_GET(PLLCFGR, PLLR, reg);
+	p.pllm = RCC_GET(PLLCFGR, PLLM, reg);
+	p.plln = RCC_GET(PLLCFGR, PLLN, reg);
+	p.pllp_real = RCC_GET(PLLCFGR, PLLP, reg);
+	switch (p.pllp_real) {
+		default:
+			p.pllp = -1;
+			break;
+		case 0:
+			p.pllp = 2;
+			break;
+		case 1:
+			p.pllp = 4;
+			break;
+		case 2:
+			p.pllp = 6;
+			break;
+		case 3:
+			p.pllp = 8;
+			break;
+	}
+	p.pllq = RCC_GET(PLLCFGR, PLLQ, reg);
+	p.src = ((reg & RCC_PLLCFGR_PLLSRC) != 0) ? 1 : 0;
+	printf("PLL Parameters: R:%d, P:%d(%d), M:%d, Q:%d, N:%d, SRC=%s\n",
+			p.pllr, p.pllp, p.pllp_real, p.pllm, p.pllq, p.plln,
+			(p.src == 1) ? "HSE" : "HSI");
+	return &p;
+}
+

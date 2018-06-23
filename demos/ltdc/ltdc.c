@@ -959,6 +959,9 @@ main(void)
 					test_buf++;
 				}
 				break;
+			case 'd':
+				(void) dump_clock();
+				break;
 			default:
 			case '?':
 				printf("\nFunctions/cmds :\n");

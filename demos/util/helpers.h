@@ -51,3 +51,6 @@
 #define DMA2D_MASK(reg, field) \
     ((DMA2D_ ## reg ##_## field ##_MASK) << DMA2D_## reg ##_## field ##_SHIFT)
 
+#define RCC_GET(reg, field, x) \
+    (((x) >> RCC_ ## reg ## _ ## field ##_SHIFT) & RCC_ ## reg ##_ ## field ##_MASK)
+
