@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <inttypes.h>
 #include <math.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
@@ -20,6 +21,8 @@
 #include "../util/helpers.h"
 
 #define FB_ADDRESS	0xc0000000
+
+int announce_drawtimes;
 
 void draw_pixel(void *, int x, int y, GFX_COLOR color);
 
@@ -727,6 +730,8 @@ simple_graphics(GFX_CTX *g)
 
 void animation_test(GFX_CTX *g, int lock);
 
+#define NOFILL_CIRCLE
+#define DOTEXT
 void
 animation_test(GFX_CTX *g, int lock)
 {
@@ -744,25 +749,47 @@ animation_test(GFX_CTX *g, int lock)
 	t0 = t1 = mtime();
 	snprintf(fps, 25, "*** FPS");
 	while (console_getc(0) == 0) {
+		uint32_t dt0, dt1;
+
+		dt1 = mtime();
+		/* gfx_fillScreen(0x0); */
 		for (i = 0; i < 800 * 480; i++) {
 			*(buf + i) = 0xff000000;
 		}
-		/* gfx_fillScreen(0x0); */
-		gfx_move_to(g, 0, 0);
+
+#ifdef DOTEXT
 		gfx_set_text_cursor(g, 250, 100);
 		gfx_puts(g, "Some Planets");
+#endif
 		gfx_move_to(g, 400, 240);
+#ifdef NOFILL_CIRCLE
+		gfx_draw_circle(g, 50, GFX_COLOR_BLUE);
+#else
 		gfx_fill_circle(g, 50, GFX_COLOR_BLUE);
+#endif
 		r1 = (r1 + 12) % 360;
 		r2 = (r2 + 6) % 360;
 		x = sin((float) r1 / 180.0 * 3.14159) * 100;
 		y = cos((float) r1 / 180.0 * 3.14159) * 100;
 		gfx_move_to(g, 400 + x, 240 + y);
+#ifdef NOFILL_CIRCLE
+		gfx_draw_circle(g, 15, GFX_COLOR_CYAN);
+#else
 		gfx_fill_circle(g, 15, GFX_COLOR_CYAN);
+#endif
 		x = sin((float) r2 / 180.0 * 3.14159) * 150;
 		y = cos((float) r2 / 180.0 * 3.14159) * 150;
 		gfx_move_to(g, 400 + x, 240 + y);
+#ifdef NOFILL_CIRCLE
+		gfx_draw_circle(g, 25, GFX_COLOR_RED);
+#else
 		gfx_fill_circle(g, 25, GFX_COLOR_RED);
+#endif
+		dt0 = mtime();
+		if (announce_drawtimes) {
+			printf("time to draw %"PRIu32" mS\n", dt0 - dt1);
+		}
+
 		/* every 60 frames this hits 0 */
 		if (r2 == 0) {
 			t1 = mtime();
@@ -771,8 +798,10 @@ animation_test(GFX_CTX *g, int lock)
 			/* delta t is in milliseconds, so 1000 * 60 / dt = FPS */
 			snprintf(fps, 25, "%5.2f FPS", 60000.0 / (float) (dt));
 		}
+#ifdef DOTEXT
 		gfx_set_text_cursor(g, 500, 400);
 		gfx_puts(g, fps);
+#endif
 		flip(lock);
 	}
 }
@@ -881,6 +910,7 @@ main(void)
 
 	uint32_t	*test_buf;
 	uint32_t	test_val;
+	announce_drawtimes = 0;
 
 
 	fprintf(stderr, "LTDC/DSI Demo Program\n");
@@ -959,6 +989,14 @@ main(void)
 					test_buf++;
 				}
 				break;
+			case 'D':
+				if (announce_drawtimes != 0) {
+					announce_drawtimes = 0;
+				} else {
+					announce_drawtimes = 1;
+				}
+				break;
+					
 			case 'd':
 				(void) dump_clock();
 				break;

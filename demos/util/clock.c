@@ -3,6 +3,7 @@
  */
 #include <stdio.h>
 #include <libopencm3/stm32/rcc.h>
+#include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/pwr.h>
 #include <libopencm3/stm32/flash.h>
 #include <libopencm3/cm3/systick.h>
@@ -476,6 +477,7 @@ void
 sys_tick_handler(void) {
     system_millis++;
 	/* simple countdown timer */
+	gpio_toggle(GPIOB, GPIO15);
 	if (delay_millis) {
 		delay_millis--;
 	}
