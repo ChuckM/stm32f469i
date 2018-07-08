@@ -458,7 +458,7 @@ clock_setup(uint32_t desired_frequency, uint32_t hse_frequency) {
 		uint32_t cfgr_bits;
 		cfgr_bits = compute_pll_bits(desired_frequency, hse_frequency);
 		/* debug test XXX: FIXME!*/
-		cfgr_bits = 0x66405a08;
+//		cfgr_bits = 0x66405a08;
 		pll_clock_setup(cfgr_bits, hse_frequency);
 	}
 	systick_setup(1000);

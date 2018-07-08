@@ -930,12 +930,13 @@ main(void) {
 		/* In both cases we write the notes using the graphics library */
 		gfx_set_text_color(g, GFX_COLOR_BLACK, GFX_COLOR_BLACK);
 		gfx_set_text_size(g, 3);
-		gfx_set_text_cursor(g, 25, 45 + DISP_HEIGHT + gfx_get_text_height(g) + 2);
+		gfx_set_text_cursor(g, 25, 55 + DISP_HEIGHT + ((gfx_get_text_height(g) * 3) + 2));
 		gfx_puts(g, (char *)"Hello world for DMA2D!");
-		lcd_flip(te_lock);
+//		lcd_flip(te_lock);
 		t1 = mtime();
 
 		/* this computes a running average of the last 10 frames */
+	/* XXX cleanup text BUG: Text height doesn't reflect magnify */
 		frame_times[f_ndx] = t1 - t0;
 		f_ndx = (f_ndx + 1) % N_FRAMES;
 		for (i = 0, avg_frame = 0; i < N_FRAMES; i++) {
@@ -943,13 +944,14 @@ main(void) {
 		}
 		avg_frame = avg_frame / (float) N_FRAMES;
 		snprintf(buf, 35, "FPS: %6.2f", 1000.0 / avg_frame);
-		gfx_set_text_cursor(g, 25, 65 + DISP_HEIGHT + 2 * (gfx_get_text_height(g) + 2));
+		gfx_set_text_cursor(g, 25, 55 + DISP_HEIGHT + 2 * ((gfx_get_text_height(g) * 3) + 2));
 		gfx_puts(g, (char *)buf);
-		gfx_puts(g, (char *)":");
+		gfx_set_text_cursor(g, 25, 55 + DISP_HEIGHT + 3 * ((gfx_get_text_height(g) * 3) + 2));
 		gfx_puts(g, "TEST: ");
-		gfx_set_text_cursor(g, 125, 85 + DISP_HEIGHT + 3 * (gfx_get_text_height(g) + 2));
-		printf("Scr opt has '%s' in it\n", scr_opt);
+		
+//		gfx_set_text_cursor(g, 5, 205 + DISP_HEIGHT + 3 * (gfx_get_text_height(g) + 2));
 		gfx_puts(g, scr_opt);
+		lcd_flip(te_lock);
 		/*
 		 * The demo runs continuously but it watches for characters
 		 * typed at the console. There are a few options you can select.

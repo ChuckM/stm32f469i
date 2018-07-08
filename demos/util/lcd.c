@@ -309,7 +309,7 @@ void
 lcd_init(void)
 {
 	uint32_t tmp;
-	uint16_t	n, q, r, p;
+	uint16_t	m, n, q, r, p;
 
 	gpio_init();
 	gpio_clear(GPIOH, GPIO7);
@@ -318,15 +318,16 @@ lcd_init(void)
 	msleep(10);
 	/* 
 	 * Set up the PLLSAI clock. This clock sets the VCO to 384Mhz
-	 * (HSE / PLLM(8) * NDIV(384) = 384Mhz
+	 * (HSE / PLLM * NDIV = 384Mhz
 	 * It sets its PLLSAI48CLK to 48Mhz VCO/PLLP = 384 / 8 = 48
 	 * It sets the SAI clock to 11.29Mhz 
 	 * It sets the LCD Clock to 48 Mhz as well (div 2 in PLLSAIR, then another 4 in DKCFGR)
  	 */
+	m = (RCC_PLLCFGR >> RCC_PLLCFGR_PLLM_SHIFT) & RCC_PLLCFGR_PLLM_MASK;
 	tmp = RCC_PLLSAICFGR;
 	p = 8;
 	q = 34;
-	n = 384;
+	n = 384 * m / 8;
 	r = 5;
 	rcc_osc_off(RCC_PLLSAICFGR);
 	/* mask out old values (q, p preserved above) */

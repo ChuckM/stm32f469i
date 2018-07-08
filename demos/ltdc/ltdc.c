@@ -416,7 +416,7 @@ void
 this_lcd_init(uint8_t *fb)
 {
 	uint32_t tmp;
-	uint16_t	n, q, r, p;
+	uint16_t	m, n, q, r, p;
 
 	printf("Reset LCD ... ");
 	fflush(stdout);
@@ -434,10 +434,14 @@ this_lcd_init(uint8_t *fb)
 	 * It sets the SAI clock to 11.29Mhz
 	 * It sets the LCD Clock to 48 Mhz as well (div 2 in PLLSAIR, then another 4 in DKCFGR)
 	 */
+	tmp = RCC_PLLCFGR;
+	m = (tmp >> RCC_PLLCFGR_PLLM_SHIFT) & RCC_PLLCFGR_PLLM_MASK;
+	printf("M value is %d\n", m);
 	tmp = RCC_PLLSAICFGR;
+	// n = 384;
+	n = (384 * m) / 8;
 	p = 8;
 	q = 34;
-	n = 384;
 	r = 5;
 	rcc_osc_off(RCC_PLLSAICFGR);
 	/* mask out old values (q, p preserved above) */
