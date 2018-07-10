@@ -835,8 +835,6 @@ main(void) {
 	generate_background();
 	printf("Generate digits\n");
 	generate_digits();
-	printf("Sample digit 6\n");
-	print_digit(6);
 
 	g = gfx_init(&local_context, draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAMEBUFFER_ADDRESS);
 	opt = 0; /* screen clearing mode */
@@ -861,7 +859,6 @@ main(void) {
 			/* fastest? Using DMA2D to fill screen */
 			scr_opt = "DMA 2D Fill";
 			dma2d_fill(0xf8ecc2);
-			printf("filled with DMA2D\n");
 			break;
 		case 3:
 			/* still fast, using DMA2D to pre-populate BG */
@@ -899,9 +896,6 @@ main(void) {
 		 * device to render the digits
 		 */
 		if (opt < 4) {
-			if (opt == 2) {
-				printf("Now filling the clock\n");
-			}
 			display_clock(g, 25, 20, mtime());
 		} else {
 			dma2d_clock(25, 20, mtime(), ds);
@@ -923,11 +917,10 @@ main(void) {
 		gfx_set_text_size(g, 3);
 		gfx_set_text_cursor(g, 25, 55 + DISP_HEIGHT + ((gfx_get_text_height(g) * 3) + 2));
 		gfx_puts(g, (char *)"Hello world for DMA2D!");
-//		lcd_flip(te_lock);
 		t1 = mtime();
 
 		/* this computes a running average of the last 10 frames */
-	/* XXX cleanup text BUG: Text height doesn't reflect magnify */
+		/* XXX cleanup text BUG: Text height doesn't reflect magnify */
 		frame_times[f_ndx] = t1 - t0;
 		f_ndx = (f_ndx + 1) % N_FRAMES;
 		for (i = 0, avg_frame = 0; i < N_FRAMES; i++) {
@@ -939,11 +932,10 @@ main(void) {
 		gfx_puts(g, (char *)buf);
 		gfx_set_text_cursor(g, 25, 55 + DISP_HEIGHT + 3 * ((gfx_get_text_height(g) * 3) + 2));
 		gfx_puts(g, "TEST: ");
-		
-//		gfx_set_text_cursor(g, 5, 205 + DISP_HEIGHT + 3 * (gfx_get_text_height(g) + 2));
 		gfx_puts(g, scr_opt);
 		lcd_flip(te_lock);
 		if (opt == 2) {
+			/* XXX doesn't display clock data if we don't pause here */
 			msleep(100);
 		}
 		/*
