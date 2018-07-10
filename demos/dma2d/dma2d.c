@@ -21,6 +21,8 @@ void draw_digit(GFX_CTX *g, int x, int y, int d, GFX_COLOR color, GFX_COLOR outl
 void draw_colon(GFX_CTX *g, int x, int y, GFX_COLOR color, GFX_COLOR outline);
 void draw_dp(GFX_CTX *g, int x, int y, GFX_COLOR color, GFX_COLOR outline);
 void dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline);
+void display_clock(GFX_CTX *g, int x, int y, uint32_t tm);
+void dma2d_clock(int x, int y, uint32_t tm, int ds);
 void generate_background(void);
 void generate_digits(void);
 
@@ -38,6 +40,10 @@ void generate_digits(void);
 #define DISP_WIDTH (DISP_HEIGHT / 2)
 #define SEG_THICK 15
 #define SEG_GAP 1
+
+/* skew digits to have a right lean */
+#define SKEW_MAX (DISP_WIDTH / 3.0)
+#define SKEW_FACTOR ((SKEW_MAX) / DISP_HEIGHT)
 
 /* Vertical segment (6 co-ordinate pairs) */
 static const int v_seg[] = {
@@ -118,8 +124,6 @@ static const struct {
 /*6*/	{ 4, 1, 1, SEG_THICK + SEG_GAP, SEG_THICK, &h_seg[0] },
 };
 
-#define SKEW_MAX (DISP_WIDTH / 3.0)
-#define SKEW_FACTOR ((SKEW_MAX) / DISP_HEIGHT)
 
 /*
  * Compute a "skew factor".
@@ -142,7 +146,6 @@ skew_factor(int dy, int h)
 /* How about the decimal point with respect to the digits? */
 // #define OUTLINE_DIGIT_BOX (broken)
 
-#define OUTLINE_DIGIT_BOX
 /*
  * Draw a graphic that looks like a 7 segment display
  * digit. 
@@ -161,14 +164,6 @@ draw_digit(GFX_CTX *g, int x, int y, int d, GFX_COLOR color, GFX_COLOR outline) 
 	int	sx, sy, ndx, xf, yf;
 
 	seg_mask = seg_map[d % 10];
-
-#ifdef OUTLINE_DIGIT_BOX
-	gfx_move(g, x - 1, y + 1);
-	gfx_draw_line(g, (int) SKEW_FACTOR * (DISP_HEIGHT + 2), -(DISP_HEIGHT+2), GFX_COLOR_BLUE);
-	gfx_draw_line(g, DISP_WIDTH + 2, 0, GFX_COLOR_BLUE);
-	gfx_draw_line(g, (int) - SKEW_FACTOR * (DISP_HEIGHT + 2), DISP_HEIGHT + 2, GFX_COLOR_BLUE);
-	gfx_draw_line(g, - (DISP_WIDTH + 2), 0, GFX_COLOR_BLUE);
-#endif
 
 	for (i = 0; i < 7; i++) {
 		/* test to see if segment is 'lit' for this number */
@@ -306,8 +301,6 @@ draw_dp(GFX_CTX *g, int x, int y, GFX_COLOR color, GFX_COLOR outline)
 		y + DISP_HEIGHT - SEG_THICK/2, SEG_THICK/2, outline);
 }
 
-void display_clock(GFX_CTX *g, int x, int y, uint32_t tm);
-void dma2d_clock(int x, int y, uint32_t tm, int ds);
 
 void
 display_clock(GFX_CTX *g, int x, int y, uint32_t tm)
@@ -624,7 +617,6 @@ print_digit(int n) {
 			row++;
 		}
 		printf("\n");
-		row += digit->w;
 	}
 	/* END DEBUG CODE */
 }
@@ -759,7 +751,7 @@ dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 	 * And finally this is the additional pixels we need to move
 	 * to get to the next line of the pre-rendered digit buffer.
 	 */
-	DMA2D_FGOR = digit->w;
+	DMA2D_FGOR = 0;
 
 	/*
 	 * And this points to the top left corner of the prerendered
@@ -851,23 +843,6 @@ main(void) {
 	can_switch = 0; /* auto switching every 10 seconds */
 	t0 = mtime();
 	ds = 0;
-#if 0
-/******* TESTING CODE ********/
-	gfx_fill_screen(g, GFX_COLOR_WHITE);
-	draw_digit(g, 100, 200, 8, GFX_COLOR_RED, GFX_COLOR_BLACK);
-
-	/* In both cases we write the notes using the graphics library */
-	gfx_fill_triangle_abs(g, 300, 300, 300, 200, 400, 200, GFX_COLOR_GREEN);
-	gfx_draw_triangle_abs(g, 300, 300, 300, 200, 400, 200, GFX_COLOR_RED);
-	gfx_set_text_color(g, GFX_COLOR_BLACK, GFX_COLOR_BLACK);
-	gfx_set_text_size(g, 3);
-	gfx_set_text_cursor(g, 25, 30 + DISP_HEIGHT + gfx_get_text_height(g) + 2);
-	gfx_puts(g, (char *)"Hello world for DMA2D!");
-	lcd_flip(te_lock);
-	while (1) ;
-/* BUG IS THAT TRIANGLES ARE BROKEN, not relative and not absolute */
-/****************** ####### ***********/
-#endif
 	
 	while (1) {
 		switch (opt) {
@@ -885,7 +860,8 @@ main(void) {
 		case 2:
 			/* fastest? Using DMA2D to fill screen */
 			scr_opt = "DMA 2D Fill";
-			dma2d_fill(0xff7fff7f);
+			dma2d_fill(0xf8ecc2);
+			printf("filled with DMA2D\n");
 			break;
 		case 3:
 			/* still fast, using DMA2D to pre-populate BG */
@@ -923,6 +899,9 @@ main(void) {
 		 * device to render the digits
 		 */
 		if (opt < 4) {
+			if (opt == 2) {
+				printf("Now filling the clock\n");
+			}
 			display_clock(g, 25, 20, mtime());
 		} else {
 			dma2d_clock(25, 20, mtime(), ds);
@@ -964,6 +943,9 @@ main(void) {
 //		gfx_set_text_cursor(g, 5, 205 + DISP_HEIGHT + 3 * (gfx_get_text_height(g) + 2));
 		gfx_puts(g, scr_opt);
 		lcd_flip(te_lock);
+		if (opt == 2) {
+			msleep(100);
+		}
 		/*
 		 * The demo runs continuously but it watches for characters
 		 * typed at the console. There are a few options you can select.
