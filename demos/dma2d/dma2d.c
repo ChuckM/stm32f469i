@@ -142,6 +142,7 @@ skew_factor(int dy, int h)
 /* How about the decimal point with respect to the digits? */
 // #define OUTLINE_DIGIT_BOX (broken)
 
+#define OUTLINE_DIGIT_BOX
 /*
  * Draw a graphic that looks like a 7 segment display
  * digit. 
@@ -566,6 +567,12 @@ generate_background(void)
 	gfx_draw_rounded_rectangle_at(g, 2, 2, 796, 476, 15, DARK_GRID);
 }
 
+/* Digits zero through 9, : and . */
+struct digit_fb {
+	int	w, h;	/* width and height */
+	uint8_t *data;
+} digits[12];
+
 /*
  * This should be a data buffer which can hold 10 digits,
  * a colon, and a decimal point, note that pixels in this
@@ -575,16 +582,15 @@ void digit_draw_pixel(void *, int x, int y, GFX_COLOR color);
 void print_digit(int n);
 
 
-uint8_t *digit_fb;/*  [digit_fb_width * digit_fb_height]; */
-int digit_fb_width, digit_fb_height;
-
 /* This is the simple graphics helper function to draw into it */
 void
 digit_draw_pixel(void *fb, int x, int y, GFX_COLOR color)
 {
+	struct digit_fb *digit = (struct digit_fb *)(fb);
 	uint8_t	c = (uint8_t) color.raw;
-	*((uint8_t *)fb + y * digit_fb_width + x) = c;
+	*(digit->data + (y * digit->w) + x) = c;
 }
+
 
 /*
  * This then will render a digit to the console, its good for
@@ -593,13 +599,15 @@ digit_draw_pixel(void *fb, int x, int y, GFX_COLOR color)
 void
 print_digit(int n) {
 	uint8_t *row;
-	unsigned int tx, ty;
+	int tx, ty;
+	struct digit_fb *digit = &digits[n];
 
-	printf("Digit FB size (W, H) = (%d, %d)\n", digit_fb_width, digit_fb_height);
-	row = (uint8_t *)&digit_fb[(n % 10) * (DISP_WIDTH+ (int) SKEW_MAX)];
-	for (ty = 0; ty < DISP_HEIGHT; ty++) {
-		for (tx = 0; tx < (DISP_WIDTH + (int) SKEW_MAX); tx++) {
-			switch (*(row + tx)) {
+	printf("Digit FB size (W, H) = (%d, %d)\n", digit->w, digit->h);
+	row = digit->data;
+	for (ty = 0; ty < digit->h; ty++) {
+		printf("%3d :", ty);
+		for (tx = 0; tx < digit->w; tx++) {
+			switch (*row) {
 			case 0:
 				console_putc(' ');
 				break;
@@ -613,9 +621,10 @@ print_digit(int n) {
 				console_putc('X');
 				break;
 			}
+			row++;
 		}
 		printf("\n");
-		row += digit_fb_width;
+		row += digit->w;
 	}
 	/* END DEBUG CODE */
 }
@@ -639,25 +648,36 @@ generate_digits(void)
 {
 	GFX_CTX	local_gfx;
 	GFX_CTX	*g;
-	uint32_t i;
-//define DIGIT_FB_WIDTH 	(int) ((DISP_WIDTH + SKEW_MAX) * 10 + (SEG_THICK + SKEW_MAX) * 2)
-//define DIGIT_FB_HEIGHT (DISP_HEIGHT)
-	digit_fb_width = (int) ((DISP_WIDTH + SKEW_MAX) * 11 + (SEG_THICK + SKEW_MAX) * 2);
-	digit_fb_height = (int) DISP_HEIGHT;
-	digit_fb = malloc(digit_fb_width * digit_fb_height);
+	int w, h;
+	int i;
 
-	g = gfx_init(&local_gfx, digit_draw_pixel, 
-		digit_fb_width, digit_fb_height, GFX_FONT_LARGE, (void *)digit_fb);
-
-	gfx_fill_screen(g, GFX_COLOR_BLACK);
-
+	w = DISP_WIDTH + SKEW_MAX;
+	h = DISP_HEIGHT;
 	for (i = 0; i < 10; i++) {
-		draw_digit(g, i * (DISP_WIDTH + SKEW_MAX), 0, i, DIGIT_BODY_COLOR, DIGIT_OUTLINE_COLOR);
+		digits[i].w = w;
+		digits[i].h = h;
+		digits[i].data = calloc(w * h, sizeof(uint8_t));
+		g = gfx_init(&local_gfx, digit_draw_pixel, w, h,
+					   GFX_FONT_LARGE, (void *)&digits[i]);
+		draw_digit(g, 0, 0, i, DIGIT_BODY_COLOR, DIGIT_OUTLINE_COLOR);
 	}
-	draw_colon(g, 10 * (DISP_WIDTH + SKEW_MAX), 0, DIGIT_BODY_COLOR, DIGIT_OUTLINE_COLOR);
-	draw_dp(g, 10 * (DISP_WIDTH + SKEW_MAX) + SEG_THICK + SKEW_MAX, 0,
-					DIGIT_BODY_COLOR, DIGIT_OUTLINE_COLOR);
-	/* now the digit_fb memory has the 10 digits 0-9, : and . in it */
+	/* colon */
+	w = SEG_THICK + SKEW_MAX;
+	h = DISP_HEIGHT;
+	digits[10].data = calloc(w * h, sizeof(uint8_t));
+	digits[10].w = w;
+	digits[10].h = h;
+	g = gfx_init(&local_gfx, digit_draw_pixel, w, h,
+						GFX_FONT_LARGE, (void *)&digits[10]);
+	draw_colon(g, 0, 0, DIGIT_BODY_COLOR, DIGIT_OUTLINE_COLOR);
+
+	/* decimal */
+	digits[11].w = w;
+	digits[11].h = h;
+	digits[11].data = calloc(w * h, sizeof(uint8_t));
+	g = gfx_init(&local_gfx, digit_draw_pixel, w, h,
+						GFX_FONT_LARGE, (void *)&digits[11]);
+	draw_dp(g, 0, 0, DIGIT_BODY_COLOR, DIGIT_OUTLINE_COLOR);
 }
 
 /*
@@ -689,11 +709,13 @@ void
 dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 {
 	uint32_t t;
-	int	w;
+	struct digit_fb *digit;
 
 	while (DMA2D_CR & DMA2D_CR_START);
 	/* This is going to be a memory to memory with PFC transfer */
 	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_M2MWB);
+
+	digit = &digits[d];
 
 	*(DMA2D_FG_CLUT) = 0x0; /* transparent black */
 	*(DMA2D_FG_CLUT+1) = color; /* foreground */
@@ -719,44 +741,32 @@ dma2d_digit(int x, int y, int d, uint32_t color, uint32_t outline)
 	 * '.' character is will be SEG_THICK + SKEW_MAX wide, it is always
 	 * DISP_HEIGHT tall.
 	 */
-	if (d < 10) {
-		w = DISP_WIDTH + SKEW_MAX;
-		/* This points to the top left corner of the digit */
-		t = (uint32_t) &(digit_fb[(d % 10) * (int) (DISP_WIDTH + SKEW_MAX)]);
-	} else if (d == 10) {
-		/* colon comes just past the 10 digits */
-		w = SEG_THICK + SKEW_MAX;
-		t = (uint32_t) &(digit_fb[10 * (int) (DISP_WIDTH + SKEW_MAX)]);
-	} else {
-		/* the decimal point is the character after colon */
-		w = SEG_THICK + SKEW_MAX;
-		t = (uint32_t) &(digit_fb[10 * (int) (DISP_WIDTH + SKEW_MAX) + (w)]);
-	}
+
 	/* So this then describes the box size */
-	DMA2D_NLR = DMA2D_SET(NLR, PL, w) | DISP_HEIGHT;
+	DMA2D_NLR = DMA2D_SET(NLR, PL, digit->w) | DISP_HEIGHT;
 	/*
 	 * This is how many additional pixels we need to move to get to
 	 * the next line of output.
 	 */
-	DMA2D_OOR = 800 - w;
+	DMA2D_OOR = 800 - digit->w;
 	/*
 	 * This is how many additional pixels we need to move to get to
 	 * the next line of background (which happens to be the output
 	 * so it is the same).
 	 */
-	DMA2D_BGOR = 800 - w;
+	DMA2D_BGOR = 800 - digit->w;
 	/*
 	 * And finally this is the additional pixels we need to move
 	 * to get to the next line of the pre-rendered digit buffer.
 	 */
-	DMA2D_FGOR = digit_fb_width - w;
+	DMA2D_FGOR = digit->w;
 
 	/*
 	 * And this points to the top left corner of the prerendered
 	 * digit buffer, where the digit (or character) top left
 	 * corner is.
 	 */
-	DMA2D_FGMAR = t;
+	DMA2D_FGMAR = (uint32_t) (digit->data);
 
 	/* Set up the foreground data descriptor
 	 *    - We are only using 3 of the colors in the lookup table (CLUT)
@@ -833,6 +843,8 @@ main(void) {
 	generate_background();
 	printf("Generate digits\n");
 	generate_digits();
+	printf("Sample digit 6\n");
+	print_digit(6);
 
 	g = gfx_init(&local_context, draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAMEBUFFER_ADDRESS);
 	opt = 0; /* screen clearing mode */
