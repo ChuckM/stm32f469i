@@ -16,7 +16,7 @@
 #
 
 OBJS = ../util/lcd.o ../util/hexdump.o ../util/console.o \
-	   ../util/clock.o ../util/sdram.o ../util/retarget.o ../util/sbrk.o
+	   ../util/clock.o ../util/sdram.o ../util/retarget.o sbrk.o
 
 BINARY = dma2d
 
