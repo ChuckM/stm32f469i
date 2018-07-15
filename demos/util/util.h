@@ -263,3 +263,7 @@ void dma2d_draw_32bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel);
 #define DMA2D_COLOR_YELLOW		(DMA2D_COLOR){.argb8888={0x55, 0xff, 0xff, 0xff}}
 #define DMA2D_COLOR_LTYELLOW	(DMA2D_COLOR){.argb8888={0xaa, 0xff, 0xff, 0xff}}
 
+/* If you are going to move the heap, implement this function to set the start
+ * and end points for the heap.
+ */
+void local_heap_setup(uint8_t **start, uint8_t **end);

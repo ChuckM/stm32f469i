@@ -2,41 +2,75 @@
  * sbrk.c
  *
  * This implements a larger heap than you get by default
- * in newlib. It uses the DRAM as the heap. The 'frame buffer'
- * for the LCD display is the last 1.5MB and this is 1MB before
- * that.
+ * in newlib. It uses the RAM between the end of the declared
+ * data and the bottom of the "largest" stack for the heap.
  *
- * It is adapted from the one that is in newlib, it just uses
- * the DRAM memory instead of __heap_start in the linker script.
- * that stays the way it is because when we don't have DRAM
- * configured we don't want to try to use it for dynamic memory!
+ * The only user interface to this code is the weakly bound
+ * local_heap_setup() which is called the first time malloc
+ * has to get more memory for the heap. This function passes
+ * pointers to its two controls, the start address and end
+ * address of the heap. Once called those are not changed.
+ *
+ * If the user does not define local_heap_setup in their code,
+ * the RAM between _ebss and _stack - MAX_STACK_SIZE is used
+ * for the heap. Typically this is RAM that is internal to the
+ * SoC.
+ *
+ * On other processors, additional ram might become available
+ * after reset and some peripheral setup (like PSRAM or SDRAM
+ * on parts with the FMC peripheral). In that case the user
+ * can define their own function local_heap_setup and put
+ * the start and end address of heap into that external RAM.
+ *
+ * Note that memory MUST be contiguous between the start and
+ * end point of the heap. If there are gaps in that memory
+ * then malloc() will hard fault when it tries to use
+ * memory from the gap.
  */
 #include <stdint.h>
-#include <stdio.h>
 #include <errno.h>
 #include <malloc.h>
 #include "../util/util.h"
 
-/* 10 MB of heap space */
-#define MAX_HEAP_SIZE	0xa00000ul
+#define MAX_STACK_SIZE	8192
 
-static uint8_t *_cur_brk = (uint8_t *) (FRAMEBUFFER_ADDRESS - MAX_HEAP_SIZE);
+#pragma weak local_heap_setup = __local_ram
+
+/* these are defined by the linker script */
+extern uint8_t _ebss, _stack;
+
+static uint8_t *_cur_brk = NULL;
+static uint8_t *_heap_end = NULL;
+
+/*
+ * If not overridden, this puts the heap into the left
+ * over ram between the BSS section and the stack while
+ * preserving MAX_STACK_SIZE bytes for the stack itself.
+ */
+static void
+__local_ram(uint8_t **start, uint8_t **end)
+{
+	*start = &_ebss;
+	*end = (uint8_t *)(&_stack - MAX_STACK_SIZE);
+}
+
+
+/* prototype to make gcc happy */
 void *_sbrk_r(struct _reent *, ptrdiff_t );
 
 void *_sbrk_r(struct _reent *reent, ptrdiff_t diff)
 {
-	uint8_t *_old_brk = _cur_brk;
-    if (_cur_brk + diff > (uint8_t *)(FRAMEBUFFER_ADDRESS)) {
+	uint8_t *_old_brk;
+
+	if (_heap_end == NULL) {
+		local_heap_setup(&_cur_brk, &_heap_end);
+	}
+
+	_old_brk = _cur_brk;
+    if (_cur_brk + diff > _heap_end) {
         reent->_errno = ENOMEM;
         return (void *)-1;
     }
     _cur_brk += diff;
     return _old_brk;
 }
-
-void _free_r(struct _reent *reent, void *ptr) {
-	/* what to do here? */	
-	reent->_errno = 0;
-	printf("_free_r(0x%x)\n", (unsigned int)(ptr));
-}
-

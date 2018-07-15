@@ -10,15 +10,15 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/dma2d.h>
 #include <gfx.h>
 #include <malloc.h>
-extern char _heap_start, _stack;
+extern char _ebss, _stack;
 
 #include "../util/util.h"
 #include "../util/helpers.h"
-void local_heap_setup(uint8_t **start, uint8_t **end);
 
 void draw_digit(GFX_CTX *g, int x, int y, int d, GFX_COLOR color, GFX_COLOR outline);
 void draw_colon(GFX_CTX *g, int x, int y, GFX_COLOR color, GFX_COLOR outline);
@@ -29,7 +29,6 @@ void dma2d_clock(int x, int y, uint32_t tm, int ds);
 void generate_background(void);
 void generate_digits(void);
 
-#define MAX_HEAP_SIZE	0xa00000ul
 /*
  * relocate the heap to the DRAM, 10MB at 0xC0000000
  */
@@ -841,7 +840,6 @@ main(void) {
 	float avg_frame;
 	int	can_switch;
 	int	opt, ds;
-	struct mallinfo mdata;
 	uint32_t temp;
 
 	GFX_CTX local_context;
@@ -850,21 +848,14 @@ main(void) {
 	/* Enable the clock to the DMA2D device */
 	rcc_periph_clock_enable(RCC_DMA2D);
 	fprintf(stderr, "DMA2D Demo program : Digits Gone Wild\n");
-	printf("Malloc subsystem information:\n");
-	mdata = mallinfo();
-	printf("	Non mapped space (arena) : %d bytes\n", mdata.arena);
-	printf("	Free chunks : %d\n", mdata.ordblks);
-	printf("	Total free space : %d\n", mdata.fordblks);
-	printf("	Total allocated space : %d\n", mdata.uordblks);
-	temp =(uint32_t) ((&_stack - &_heap_start) - 8192);
-	printf(" Heap possible : %d bytes starting at 0x%0X\n", temp, &_heap_start);
 
 	printf("Generate background\n");
 	generate_background();
 	printf("Generate digits\n");
 	generate_digits();
 
-	g = gfx_init(&local_context, draw_pixel, 800, 480, GFX_FONT_LARGE, (void *)FRAMEBUFFER_ADDRESS);
+	g = gfx_init(&local_context, draw_pixel, 800, 480, GFX_FONT_LARGE, 
+						(void *)FRAMEBUFFER_ADDRESS);
 	opt = 0; /* screen clearing mode */
 	can_switch = 0; /* auto switching every 10 seconds */
 	t0 = mtime();
