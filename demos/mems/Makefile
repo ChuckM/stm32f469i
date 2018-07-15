@@ -5,7 +5,8 @@ OBJS = mems.o signal.o reticle.o ../util/dma2d.o ../util/sbrk.o ../util/lcd.o ..
 
 BINARY = main
 
-LDSCRIPT = ../stm32f469i-discovery.ld
+DEVICE = STM32F469NI
+#LDSCRIPT = ../stm32f469i-discovery.ld
 
 CFLAGS = -I../../simple-graphics/include
 LDFLAGS = -L../../simple-graphics/lib
