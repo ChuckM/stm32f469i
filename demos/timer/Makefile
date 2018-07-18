@@ -1,11 +1,13 @@
 # Timer experiments
 #
 
-OBJS = ../util/console.o ../util/clock.o ../util/sdram.o ../util/retarget.o
+OBJS = 	../util/console.o ../util/clock.o \
+		../util/sdram.o ../util/retarget.o \
+		../util/sbrk.o
 
 BINARY = timer
 
-LDSCRIPT = ../stm32f469i-discovery.ld
+DEVICE = STM32F469NI
 
 include ../../Makefile.include
 

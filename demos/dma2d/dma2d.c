@@ -840,7 +840,6 @@ main(void) {
 	float avg_frame;
 	int	can_switch;
 	int	opt, ds;
-	uint32_t temp;
 
 	GFX_CTX local_context;
 	GFX_CTX *g;
