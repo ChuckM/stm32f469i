@@ -38,8 +38,6 @@ sample_start(void)
 	SPI_I2SCFGR(SPI3) |= SPI_I2SCFGR_I2SE;
 	/* start sending it clocks */
 	TIM4_CR1 |= TIM_CR1_CEN;
-	gpio_clear(GPIOA, GPIO15);
-	gpio_set(GPIOA, GPIO15);
 }
 
 void
@@ -49,6 +47,7 @@ sample_end(void)
 	TIM4_CR1 = TIM4_CR1 & (~TIM_CR1_CEN);
 	/* enable the I2S port */
 	SPI_I2SCFGR(SPI3) = SPI_I2SCFGR(SPI3) & (~SPI_I2SCFGR_I2SE);
+	gpio_clear(GPIOB, GPIO12);
 }
 
 /* Ok to get down to brass tacks.
@@ -70,6 +69,7 @@ main(void)
 	uint16_t	*raw_bits;
 	uint8_t		*pcm_samples;
 	uint32_t	reg;
+	int		iter;
 
 	printf("\nMicrophone sampling example\n");
 	rcc_periph_clock_enable(RCC_TIM4);
@@ -78,6 +78,8 @@ main(void)
 	rcc_periph_clock_enable(RCC_GPIOA);
 	rcc_periph_clock_enable(RCC_SPI3);
 
+	gpio_mode_setup(GPIOB, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO12);
+	gpio_clear(GPIOB, GPIO12);
 	/* Set up the pins as alternate function, and pick AF2 (timer) */
 	gpio_mode_setup(GPIOD, GPIO_MODE_AF, GPIO_PUPD_NONE,
 					GPIO12 | GPIO13 | GPIO6);
@@ -143,11 +145,12 @@ main(void)
  * kick it off by making WS go high. SUCCESS! Sort of
  *
  * EXP 6: Can we start it by doing a gpio_set of GPIO15 ?
- * apparently that works too.
+ * apparently that works too. But unreliable.
+ *
+ * EXP 7: Connecting PB12 to PA15 (WS) and kicking it that way.
  *
  */
 	SPI_I2SCFGR(SPI3) = SPI_I2SCFGR_I2SMOD |
-//			SPI_I2SCFGR_CKPOL |
 			(SPI_I2SCFGR_I2SCFG_SLAVE_RECEIVE << SPI_I2SCFGR_I2SCFG_SHIFT) |
 			(SPI_I2SCFGR_I2SSTD_MSB_JUSTIFIED << SPI_I2SCFGR_I2SSTD_SHIFT);
 	
@@ -167,20 +170,25 @@ main(void)
 	} else {
 		printf("pcm_samples located at 0x%0x\n", (unsigned int) pcm_samples);
 	}
+	iter = 0;
 	while (1) {
 		char buf[128];
 		int	ndx;
 
-		printf("Ready to sample, press enter to start\n");
+		printf("Iteration #%d: Ready to sample, press enter to start\n", iter);
 		fgets(buf, 128, stdin);
 		sample_start();
+		gpio_clear(GPIOB, GPIO12);
+		gpio_set(GPIOB, GPIO12);
 		for (ndx = 0; ndx < 375000; ndx++) {
 			do {
 				reg = SPI_SR(SPI3);
+				gpio_toggle(GPIOB, GPIO12);
 			} while ((reg & SPI_SR_RXNE) == 0);
 			raw_bits[ndx] = SPI_DR(SPI3);
 		}
 		sample_end();
-		printf("Done.\n");
+		printf("\nDone.\n");
+		iter++;
 	}
 }
