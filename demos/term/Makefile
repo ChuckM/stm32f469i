@@ -8,7 +8,8 @@ OBJS = bold-font.o regular-font.o ../util/lcd.o ../util/hexdump.o ../util/consol
 BINARY = term
 
 
-LDSCRIPT = ../stm32f469i-discovery.ld
+#LDSCRIPT = ../stm32f469i-discovery.ld
+DEVICE = STM32F469HI
 
 CFLAGS = -I../../simple-graphics/include
 LDFLAGS = -L../../simple-graphics/lib
