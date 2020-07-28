@@ -5,3 +5,4 @@ demos/term/font/makefont
 *.elf
 tags
 cscope.out
+generated.*
