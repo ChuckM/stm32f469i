@@ -359,10 +359,11 @@ dma2d_clock(int x, int y, uint32_t tm, int ds)
 {
 	int hh, mm, ss, ms;
 
-	hh = (int) tm / 3600000;
+	hh = ((int) tm / 3600000) % 24;
 	mm = (int) (tm % 3600000) / 60000;
 	ss = (int) (tm % 60000) / 1000;
 	ms = (int) tm % 1000;
+
 	if (ds) {
 		dma2d_digit(x + 10, y + 10, hh / 10, SHADOW, SHADOW);
 	}
@@ -855,8 +856,8 @@ main(void) {
 
 	g = gfx_init(&local_context, draw_pixel, 800, 480, GFX_FONT_LARGE, 
 						(void *)FRAMEBUFFER_ADDRESS);
-	opt = 0; /* screen clearing mode */
-	can_switch = 0; /* auto switching every 10 seconds */
+	opt = 5; /* screen clearing mode */
+	can_switch = -1; /* auto switching every 10 seconds */
 	t0 = mtime();
 	ds = 0;
 	
