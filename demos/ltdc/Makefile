@@ -19,8 +19,7 @@ OBJS = ../util/hexdump.o ../util/console.o ../util/clock.o ../util/sdram.o ../ut
 
 BINARY = ltdc
 
-LDSCRIPT = ../stm32f469i-discovery.ld
-#LDSCRIPT = ./stm32f4-disco.ld
+DEVICE = STM32F469HI
 
 CFLAGS = -I../../simple-graphics/include
 LDFLAGS = -L../../simple-graphics/lib
