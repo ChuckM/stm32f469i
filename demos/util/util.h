@@ -3,6 +3,9 @@
  * This include file describes the functions exported by clock.c
  */
 #pragma once
+#include <stdint.h>
+#include <stdlib.h>
+
 /*
  * Definitions for clock functions
  */
@@ -267,3 +270,31 @@ void dma2d_draw_32bpp(DMA2D_BITMAP *fb, int x, int y, uint32_t pixel);
  * and end points for the heap.
  */
 void local_heap_setup(uint8_t **start, uint8_t **end);
+
+/*
+ *
+ * The utility functions for i2c
+ *
+ */
+
+#define I2C_100KHZ	0
+#define I2C_400KHZ	1
+#define I2C_1MHZ	2
+
+/*
+ * An i2c "device" on the i2c bus 'i2c' with address 'addr'
+ */
+typedef struct {
+	int			i2c;	/* 1, 2, or 3. */
+	uint8_t		addr;
+} i2c_dev;
+
+/*
+ * Prototypes for functions.
+ */
+
+i2c_dev *i2c_init(int i2c, uint8_t addr, uint8_t baud);
+
+int	i2c_write(i2c_dev *chan, uint8_t *buf, size_t buf_size, int send_stop);
+int	i2c_read(i2c_dev *chan, uint8_t *buf, size_t buf_size, int send_stop);
+

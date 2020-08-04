@@ -15,9 +15,11 @@
 #include <stdint.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
-#include <libopencm3/stm32/i2c.h>
+#include <libopencm3/stm32/exti.h>
+#include <gfx.h>
+#include <malloc.h>
 #include "../util/util.h"
-#include "../util/i2c.h"
+
 
 #define FT6206_DEVICE_ID	0xA8
 #define FT6206_FIRMWARE		0xAF
@@ -47,7 +49,75 @@ print_touch(struct touch_t *t, char *label) {
 		label, t->x, t->y, t->evt, t->tid);
 	printf("\tWeight: %d, Area %d\n", t->weight, t->misc);
 }
-	
+
+i2c_dev *touch_device;
+struct touch_data_t {
+	struct touch_t tp[2];
+	int				n;
+} touch_data[2];
+int touch_ndx = 0;						/* index into touch_data */
+
+/* "working" touch data */
+struct touch_data_t *cur_touch = &touch_data[0];
+
+volatile int touch_event = 0;
+
+/*
+ * This interrupt it called when the touch device gets a touch
+ *
+ * Need to double buffer the touch points so that we don't get them
+ * overwritten while the program is using them. So copies of
+ * two touch_t's and touch_count. 
+ *
+ * get_touch returns a pointer and swaps pages. Then the 'active page'
+ * keeps being overwritten until it is read and then the pages get swapped.
+ */
+void
+exti9_5_isr(void)
+{
+	uint8_t buf[16];
+
+	buf[0] = 0;
+	i2c_write(touch_device, buf, 1, 0);
+	i2c_read(touch_device, buf, 16, 1);
+
+	/* extract touch points */
+	for (int i = 0; i < 2; i++) {
+		int ndx = i*6 + 3;
+		cur_touch->tp[i].evt = (buf[ndx] & 0xc0) >> 6;
+		cur_touch->tp[i].x = ((buf[ndx] & 0x3f) << 8) | (buf[ndx+1] & 0xff);
+		cur_touch->tp[i].tid = (buf[ndx+2] & 0xf0) >> 4;
+		cur_touch->tp[i].y = ((buf[ndx+2] & 0xf) << 8) | (buf[ndx+3] & 0xff);
+	}
+	cur_touch->n = buf[2];
+	touch_event++;
+}
+
+struct touch_data_t  *get_touch(void);
+
+/*
+ * Check the current touch structure, see if it has seen a touch.
+ * If so, swap touch structures and return the current one.
+ */
+struct touch_data_t *
+get_touch(void)
+{
+	struct touch_data_t *nxt = &touch_data[(touch_ndx + 1) & 1];
+	struct touch_data_t *res = cur_touch;
+
+	/* if n == 0, haven't seen any touching */
+	if (!cur_touch->n) {
+		return NULL;
+	}
+	nxt->n = 0;
+	cur_touch = nxt;
+	return res;
+}
+
+/*
+ * A helper function that reads the value from a register on the
+ * touch controller chip.
+ */
 int
 read_reg(i2c_dev *i2c, uint8_t reg)
 {
@@ -63,6 +133,10 @@ read_reg(i2c_dev *i2c, uint8_t reg)
 	return (int) buf[0];
 }
 
+/*
+ * A helper function that writes a value to a register on the 
+ * touch controller chip.
+ */
 int
 write_reg(i2c_dev *i2c, uint8_t reg, uint8_t value)
 {
@@ -77,17 +151,20 @@ write_reg(i2c_dev *i2c, uint8_t reg, uint8_t value)
 }
 
 /*
- * This demo uses the touch controller on the 469i
- * Discovery board to demonstrate i2c programming.
+ * This demo demonstrates the use of the FocalTech
+ * FT6206 Touch Controller that is part of the display
+ * on this board.
  *
- * The controller is a Focal Tech FT6206GMA and
- * it is connected to pins PB8 and PB9 (SCL, SDA)
+ * The controller is connected to pins PB8 and PB9 (SCL, SDA)
  * and it connects an interrupt line to PJ5.
+ *
+ * The demo displays a target where you touch the display and
+ * provides additional information to the serial port at
+ * 57600 baud.
  */
 int
 main(void)
 {
-	i2c_dev	*i2c;
 	int		res, lib[2];
 	int		count;
 	char	*chip_id;
@@ -97,13 +174,13 @@ main(void)
 
 	printf("\033[1;1H\033[J\n");
 	fprintf(stderr, "I2C Example Code\n");
-	i2c = i2c_init(I2C1, I2C_400KHZ, 0x54);
-	if (i2c == NULL) {
+	touch_device = i2c_init(1, I2C_400KHZ, 0x54);
+	if (touch_device == NULL) {
 		fprintf(stderr, "Unable to initialize i2c\n");
 		while (1);
 	}
 	printf("Reading device ID\n");
-	res = read_reg(i2c, FT6206_DEVICE_ID);
+	res = read_reg(touch_device, FT6206_DEVICE_ID);
 	switch (res) {
 		case 0x11:
 			chip_id = "FT6206";
@@ -116,42 +193,48 @@ main(void)
 			break;
 	}
 	printf("Chip ID returned: 0x%0x (%s)\n", res, chip_id);
-	res = read_reg(i2c, FT6206_FIRMWARE);
+	res = read_reg(touch_device, FT6206_FIRMWARE);
 	if (res < 0) {
 		printf("    Firmware: <read error>\n");
 	} else {
 		printf("    Firmware: 0x%02x\n", res);
 	}
-	lib[0] = read_reg(i2c, FT6206_LIBV_LOW);
-	lib[1] = read_reg(i2c, FT6206_LIBV_HIGH);
+	lib[0] = read_reg(touch_device, FT6206_LIBV_LOW);
+	lib[1] = read_reg(touch_device, FT6206_LIBV_HIGH);
 	if ((lib[0] < 0) || (lib[1] < 0)) {
 		printf("    Library: <read error>\n");
 	} else {
 		printf("    Library: %d.%d\n", lib[0], lib[1]);
 	}
-	res = read_reg(i2c, FT6206_STATE);
+	res = read_reg(touch_device, FT6206_STATE);
 	if (res < 0) {
 		printf("    State: <read error>\n");
 	} else {
 		printf("    State: 0x%02x\n", res);
 	}
-	write_reg(i2c, FT6206_THRESH, 0x80);
+	/* This effectively kicks it off */
+	write_reg(touch_device, FT6206_THRESH, 0x80);
 	
 	count = 0;
 	while (1) {
 		struct touch_t t[2];
 		int val[15];
+		uint8_t buf[16];
 
 		while(gpio_get(GPIOJ, GPIO5) != 0) ;
 		count++;
 		printf("\033[8;1H\n");
 		printf("Chip registers:\n");
+		buf[0] = 0;
+		i2c_write(touch_device, buf, 1, 0);
+		i2c_read(touch_device, buf, 16, 1);
 		for (int i = 0; i < 15; i++) {
-			val[i] = read_reg(i2c, i);
+			val[i] = read_reg(touch_device, i);
 			if (val[i] < 0) {
 			    printf("  Register %2d : <read error>", i);
 			} else {
-				printf("  Register %2d : 0x%02x\n", i, (uint8_t) val[i]);
+				printf("  Register %2d : 0x%02x (0x%02x)\n", i, 
+						(uint8_t) val[i], buf[i]);
 			}
 		}
 		printf("\nTotal touch events : %d\n\n", count);
