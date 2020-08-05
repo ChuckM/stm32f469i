@@ -3,7 +3,7 @@
 OBJS = ../util/clock.o ../util/console.o ../util/retarget.o \
 		../util/i2c.o ../util/sbrk.o ../util/lcd.o ../util/sdram.o
 
-BINARY = touch
+BINARY = touch_poll
 
 DEVICE = STM32F469HI
 

@@ -8,8 +8,8 @@
  * it is connected to pins PB8 and PB9 (SCL, SDA)
  * and it connects an interrupt line to PJ5. I2C Address 0x54 (decimal 84)
  *
- * This variant uses the EXTI peripheral and sets up interrupts
- * from PB9 to notify the program that a touch has been detected.
+ * This variant polls GPIO PJ5 to see if there is currently a touch going
+ * on and the data should be fetched.
  *
  * Copyright (C) 2016 - 2020, Chuck McManis, all rights reserved.
  */
@@ -39,7 +39,6 @@
 #define FT6206_DELTA_Z		0x96
 
 #define SEND_I2C_STOP	1
-
 /* device structure with I2C channel and address for the touch device */
 i2c_dev *touch_device;
 
@@ -160,84 +159,31 @@ print_touch(touch_point *t, char *label) {
 	printf("\tWeight: %d, Area %d\n", t->weight, t->misc);
 }
 
-
-/***
- * Touch controller ISR
- *
- * The touch controller INT line is tied to PJ5. The code uses
- * the EXTI peripheral to set up PJ5 to generate an interrupt
- * on it's falling edge.
- *
- * When the routine is entered, it resets the pending interrupt
- * and grabs all of the registers from the chip. This works because
- * the I2C code is polled and not interrupt driven. If you later decide
- * to make both use interrupts you must insure that the I2C channel has
- * higher priority (lower priority number) other wise when this code
- * talks to the device those interrupts won't fire and you'll just
- * wait forever in your code.
- *
- * State for touches is maintained in a touch_event structure. It is
- * double buffered so that if you're looking at the most recent
- * touch event, a new one coming in won't write over the data that you
- * are looking at.
- *
- * The flip flopping between the active buffer and the one in use is
- * done by the get_touch() function.
- *                                                                  ***/
-
-touch_event	touch_data[2];
-int 		touch_ndx = 0;			/* index into touch_data */
-
-/*
- * "working" touch data
- * This pointer is used by the ISR to fill in the results of the
- * touch action. Before returning it to the caller of get_touch
- * get_touch swaps it out so the ISR starts using the "other"
- * touch data structure.
- */
-touch_event * volatile cur_touch = &touch_data[0];
-
-/*
- * This interrupt it called when the touch device gets a touch
- */
-void
-exti9_5_isr(void)
-{
-	get_touch_data(touch_device, cur_touch);
-
-	/* acknowledge the interrupt */
-	EXTI_PR = (1 << 5);
-}
-
 /*
  * get_touch( int wait_for_touch )
  *
  * Primary API to the touch panel controller.
  *
  * If you pass 0 to it, it returns immediately with NULL if there hasn't
- * been a touch. If there has been a touch, it swaps out the touch buffers
- * so you won't be processing a structure that the isr might be writing at
- * the same time and returns the "current" structure.
+ * been a touch. If there has been a touch, it fetches the touch controllers
+ * registers and puts them into a static structure it is holding and returns
+ * a pointer to that structure.
  */
 touch_event *
 get_touch(int wait)
 {
-	touch_event *nxt = &touch_data[(touch_ndx + 1) & 1];
-	touch_event *res = cur_touch;
+	static touch_event res;
 
-	/* if n == 0, haven't seen any touching */
-	if ((cur_touch->n == 0) && (wait == 0)) {
+	/* if n == 0, don't see a touch */
+	if ((gpio_get(GPIOJ, GPIO5)) && (wait == 0)) {
 		return NULL;
 	}
-	/* ISR sets n as the last thing it does */
-	while (cur_touch->n == 0) ;
+	while (gpio_get(GPIOJ, GPIO5)) ;
 
-	/* mark the next structure as 'unused' and swap */
-	nxt->n = 0;
-	cur_touch = nxt;
-	
-	/* return the current structure */
-	return res;
+	/* fetch the registers */
+	get_touch_data(touch_device, &res);
+
+	return &res;
 }
 
 /*
@@ -259,7 +205,7 @@ main(void)
 	char	*chip_id;
 
 	printf("\033[1;1H\033[J\n");
-	fprintf(stderr, "I2C Example Code (interrupt driven)\n");
+	fprintf(stderr, "I2C Example Code (polling)\n");
 
 	/* initialize the i2c_device handle for the touch panel controller */
 	touch_device = i2c_init(1, I2C_400KHZ, 0x54);
@@ -268,29 +214,15 @@ main(void)
 		while (1);
 	}
 
-	/*** interrupt version
+	/*** polling version
 	 *
-	 * In the interrupt version we have to do a bit more work and turn
-	 * this GPIO pin into a source of interrupts. We do that with the
-	 * EXTI controller's help.
+	 * In the polling version we just set this to an input and we're
+	 * done
 	 *
 	 *  Set up pin PJ5 as an input
 	 *                                                             ***/
 	rcc_periph_clock_enable(RCC_GPIOJ);
 	gpio_mode_setup(GPIOJ, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO5);
-
- 	/* enable interrupts from PJ5 */
-	rcc_periph_clock_enable(RCC_SYSCFG);
-	/* set the source to Port J (0x9), pin 5 */
-	SYSCFG_EXTICR2 = (0x9 << 4);
-
-	/* enable interrupts */
-	EXTI_IMR |= (1 << 5);
-	/* interrupt on falling edge */
-	EXTI_RTSR |= (1 << 5);
-	EXTI_FTSR |= (1 << 5);
-	/* Turn on interrupts */
-	nvic_enable_irq(NVIC_EXTI9_5_IRQ);
 
 	/*** Common code
 	 *
