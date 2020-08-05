@@ -57,7 +57,7 @@ i2c_dev *
 i2c_init(int i2c, uint8_t addr, uint8_t baud)
 {
 	uint32_t dev = __i2c_base[i2c];
-	uint32_t f;
+	uint32_t fpclk;
 	i2c_dev *res;
 
 	if ((i2c < 1) || (i2c > 3)) {
@@ -81,15 +81,16 @@ i2c_init(int i2c, uint8_t addr, uint8_t baud)
 	gpio_set_af(GPIOB, GPIO_AF4, GPIO8 | GPIO9);
 
 	rcc_periph_clock_enable(__i2c_clock[i2c]);
-	f = rcc_apb1_frequency / 1000000;
+	fpclk = rcc_apb1_frequency / 1000000;
 
 	/* disable the peripheral to set clocks */
 	I2C_CR1(dev) = I2C_CR1(dev) & ~(I2C_CR1_PE); 
     /* during init this check is fast enough */
-	if ((f < 2) || (f > 42)) {
+	if ((fpclk < 2) || (fpclk > 42)) {
 		return NULL; /* can't run */
 	}
-	I2C_CR2(dev) = (f & 0x3f); /* XXX don't bother with DMA or interrupts yet */
+	I2C_CR2(dev) = (fpclk & 0x3f); 
+
 	/*
  	 * Compute the clock delay, 
 	 *   in normal mode this is (Freq(APB1) / 100Khz) / 2 
@@ -103,13 +104,13 @@ i2c_init(int i2c, uint8_t addr, uint8_t baud)
 	 *
 	 */
 	if (baud == I2C_400KHZ) {
-		/* f x (1000 / 400) / 3 == f x 5 / 6 */
-		I2C_CCR(dev) = 0x8000 | (((f * 5) / 6) & 0xfff);
+		/* fpclk x (1000 / 400) / 3 == f x 5 / 6 */
+		I2C_CCR(dev) = 0x8000 | (((fpclk * 5) / 6) & 0xfff);
 	} else {
-		/* f x (1000 / 100) / 2 == f x 5 */
-		I2C_CCR(dev) = (f * 5) & 0xfff;
+		/* fpclk x (1000 / 100) / 2 == fpclk x 5 */
+		I2C_CCR(dev) = (fpclk * 5) & 0xfff;
 	}
-	I2C_TRISE(dev) = (f + 1) & 0x3f;
+	I2C_TRISE(dev) = (fpclk + 1) & 0x3f;
 
 	/* enable the peripheral */
 	I2C_CR1(dev) |= I2C_CR1_PE;
