@@ -49,6 +49,23 @@ i2c_dev *touch_device;
 volatile int touch_detects = 0;
 volatile int gesture_detects = 0;
 
+static void
+draw_pixel(void *buf, int x, int y, GFX_COLOR c)
+{
+	lcd_draw_pixel(buf, x, y, c.raw);
+}
+
+/*
+ * relocate the heap to the DRAM, 10MB at 0xC0000000
+ */
+void
+local_heap_setup(uint8_t **start, uint8_t **end)
+{
+	console_puts("Local heap setup\n");
+	*start = (uint8_t *)(0xc0000000);
+	*end = (uint8_t *)(0xc0000000 + (10 * 1024 * 1024));
+}
+
 /****
  *  local helper functions that make the code a bit cleaner
  *                                                      ****/
@@ -257,6 +274,9 @@ main(void)
 {
 	int		res, lib[2];
 	char	*chip_id;
+	GFX_CTX local_context;
+	GFX_CTX *g;
+
 
 	printf("\033[1;1H\033[J\n");
 	fprintf(stderr, "I2C Example Code (interrupt driven)\n");
@@ -334,11 +354,25 @@ main(void)
  	 */
 	write_reg(touch_device, FT6206_THRESH, 0x80);
 	
+	/* Enable the clock to the DMA2D device */
+	rcc_periph_clock_enable(RCC_DMA2D);
+
+	g = gfx_init(&local_context, draw_pixel, 800, 480, GFX_FONT_LARGE, 
+						(void *)FRAMEBUFFER_ADDRESS);
+	gfx_move_to(g, 15, 15);
+	gfx_set_text_color(g,GFX_COLOR_YELLOW, GFX_COLOR_BLACK);
+	gfx_puts(g, "Touch Controller Demo");
+	lcd_flip(0);
+
 	while (1) {
 		touch_event *td;
 
 		/* Get a touch event, spin wait if no touching */
 		td = get_touch(1);
+
+		gfx_draw_point_at(g, td->tp[0].y, 480 - td->tp[0].x, GFX_COLOR_CYAN);
+		gfx_draw_point_at(g, td->tp[1].y, 480 - td->tp[1].x, GFX_COLOR_YELLOW);
+		lcd_flip(0);
 
 		/* move cursor to start of data area, clear to end of screen */
 		printf("\033[8;1H\033[J\n");
