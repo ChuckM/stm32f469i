@@ -73,6 +73,8 @@ void hex_dump(uint32_t addr, uint8_t *data, unsigned int len);
 void on_led(LED_COLOR c);
 void off_led(LED_COLOR c);
 void toggle_led(LED_COLOR c);
+void all_leds_on(void);
+void all_leds_off(void);
 void led_init(void);
 
 /* Defines and prototypes for the sdram code */

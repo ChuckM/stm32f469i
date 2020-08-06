@@ -14,7 +14,23 @@
 #include "../util/util.h"
 
 void
-on_led(LED_COLOR c)
+all_leds_on(void)
+{
+	gpio_clear(GPIOD, GPIO4 | GPIO5);
+	gpio_clear(GPIOG, GPIO6);
+	gpio_clear(GPIOK, GPIO3);
+}
+
+void
+all_leds_off(void)
+{
+	gpio_set(GPIOD, GPIO4 | GPIO5);
+	gpio_set(GPIOG, GPIO6);
+	gpio_set(GPIOK, GPIO3);
+}
+
+void
+off_led(LED_COLOR c)
 {
 	switch (c) {
 		case RED_LED:
@@ -31,7 +47,7 @@ on_led(LED_COLOR c)
 }
 
 void
-off_led(LED_COLOR c)
+on_led(LED_COLOR c)
 {
 	switch (c) {
 		case RED_LED:
