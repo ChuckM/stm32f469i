@@ -277,7 +277,6 @@ main(void)
 	GFX_CTX local_context;
 	GFX_CTX *g;
 
-
 	printf("\033[1;1H\033[J\n");
 	fprintf(stderr, "I2C Example Code (interrupt driven)\n");
 
