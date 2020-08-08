@@ -935,7 +935,7 @@ main(void) {
 		gfx_set_text_color(g, GFX_COLOR_BLACK, GFX_COLOR_BLACK);
 		gfx_set_text_size(g, 3);
 		gfx_set_text_cursor(g, 25, 55 + DISP_HEIGHT + ((gfx_get_text_height(g) * 3) + 2));
-		gfx_puts(g, (char *)"Hello world for DMA2D!");
+		gfx_puts(g, (char *)"Hello world from DMA2D!");
 		t1 = mtime();
 
 		/* this computes a running average of the last 10 frames */
