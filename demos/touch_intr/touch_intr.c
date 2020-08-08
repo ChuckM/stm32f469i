@@ -19,12 +19,14 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/exti.h>
+#include <libopencm3/stm32/dma2d.h>
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/syscfg.h>
 #include <gfx.h>
 
 #include <malloc.h>
 #include "../util/util.h"
+#include "../util/helpers.h"
 
 
 #define FT6206_DEVICE_ID	0xA8
@@ -49,6 +51,9 @@ i2c_dev *touch_device;
 volatile int touch_detects = 0;
 volatile int gesture_detects = 0;
 
+/*
+ * Pixel drawing function for the gfx library.
+ */
 static void
 draw_pixel(void *buf, int x, int y, GFX_COLOR c)
 {
@@ -76,6 +81,11 @@ void print_touch(touch_point *t, char * label);
 
 /*
  * Snatch a touch from the device.
+ *
+ * Note that it has it's own idea of where 0,0 and 480,800 are. On
+ * the Touch controller X is along the narrow dimension, Y is along
+ * the longer dimension (like a smart phone). So we remap to our
+ * own graphics co-ordinates.
  */
 void
 get_touch_data(i2c_dev *t, touch_event *te)
@@ -89,11 +99,14 @@ get_touch_data(i2c_dev *t, touch_event *te)
 
 	/* extract touch points */
 	for (int i = 0; i < 2; i++) {
+		int tsx, tsy;
 		int ndx = i*6 + 3;
 		te->tp[i].evt = (buf[ndx] & 0xc0) >> 6;
-		te->tp[i].x = ((buf[ndx] & 0x3f) << 8) | (buf[ndx+1] & 0xff);
+		tsx = ((buf[ndx] & 0x3f) << 8) | (buf[ndx+1] & 0xff);
 		te->tp[i].tid = (buf[ndx+2] & 0xf0) >> 4;
-		te->tp[i].y = ((buf[ndx+2] & 0xf) << 8) | (buf[ndx+3] & 0xff);
+		tsy = ((buf[ndx+2] & 0xf) << 8) | (buf[ndx+3] & 0xff);
+		te->tp[i].x = tsy;
+		te->tp[i].y = 480 - tsx;
 	}
 	switch(buf[1]) {
 		case 0:
@@ -169,6 +182,9 @@ write_reg(i2c_dev *i2c, uint8_t reg, uint8_t value)
 /*
  * Function that prints out the contents of a touch point
  * structure.
+ *
+ * Not used in this version but you can call it for learning
+ * about what the flags do. (it is called in the polled version)
  */
 void
 print_touch(touch_point *t, char *label) {
@@ -257,6 +273,109 @@ get_touch(int wait)
 	return res;
 }
 
+void init_screen(GFX_CTX *g);
+void dma2d_fill(uint32_t color);
+void show_xy(GFX_CTX *g, int x, int y);
+
+/*
+ * Use the DMA2D peripheral in register to memory
+ * mode to clear the frame buffer to a single
+ * color.
+ */
+void
+dma2d_fill(uint32_t color)
+{
+	DMA2D_IFCR |= 0x3F;
+	DMA2D_CR = DMA2D_SET(CR, MODE, DMA2D_CR_MODE_R2M);
+	DMA2D_OPFCCR = 0x0; /* ARGB8888 pixels */
+	/* force it to have full alpha */
+	DMA2D_OCOLR = 0xff000000 | color;
+	DMA2D_OOR =	0;
+	DMA2D_NLR = DMA2D_SET(NLR, PL, 800) | 480; /* 480 lines */
+	DMA2D_OMAR = (uint32_t) FRAMEBUFFER_ADDRESS;
+
+	/* kick it off */
+	DMA2D_CR |= DMA2D_CR_START;
+	while (DMA2D_CR & DMA2D_CR_START);
+}
+
+/*
+ * init_screen(...)
+ *
+ * Clear the screen, put up test message, and two "command" buttons.
+ * "clear" 		- clears the screen of pixels you have "drawn"
+ * "show x/y" 	- Displays a small box in the lower left of touch co-ordinates
+ *
+ */
+void
+init_screen(GFX_CTX *g)
+{
+	int dx, dy;
+	int mx, my;
+
+	dma2d_fill(0);
+	gfx_move_to(g, 15, 15);
+	gfx_set_text_color(g,GFX_COLOR_YELLOW, GFX_COLOR_BLACK);
+	gfx_set_text_size(g, 3);
+	gfx_set_text_cursor(g, 1, 30);
+	gfx_puts(g, "Touch Controller Demo");
+	gfx_set_text_cursor(g, 1, 30+gfx_get_text_height(g)*3);
+	gfx_puts(g, "  (Interrupt Driven)");
+
+	gfx_set_text_size(g, 2);
+	gfx_move_to(g, 645, 5);
+	gfx_fill_rounded_rectangle(g, 150, 50, 5, GFX_COLOR_DKGREY);
+	gfx_draw_rounded_rectangle(g, 150, 50, 5, GFX_COLOR_WHITE);
+	gfx_set_text_color(g, GFX_COLOR_WHITE, GFX_COLOR_DKGREY);
+	mx = gfx_get_string_width(g, "CLEAR");
+	my = gfx_get_text_height(g) * 2;
+	dx = (150 - mx)/2;
+	dy = my + ((50 - my)/2);
+	gfx_set_text_cursor(g, 645+dx, 0+dy);
+	gfx_puts(g, "CLEAR");
+
+	gfx_move_to(g, 645, 65);
+	gfx_fill_rounded_rectangle(g, 150, 50, 5, GFX_COLOR_DKGREY);
+	gfx_draw_rounded_rectangle(g, 150, 50, 5, GFX_COLOR_WHITE);
+	gfx_set_text_color(g, GFX_COLOR_WHITE, GFX_COLOR_DKGREY);
+	mx = gfx_get_string_width(g, "SHOW X/Y");
+	my = gfx_get_text_height(g) * 2;
+	dx = (150 - mx)/2;
+	dy = my + ((50 - my)/2);
+	gfx_set_text_cursor(g, 645+dx, 60+dy);
+	gfx_puts(g, "SHOW X/Y");
+	
+	lcd_flip(0); 
+}
+
+/*
+ * Put a small box in the lower left corner showing X and Y co-ordinates
+ * of the touch.
+ *
+ * There is an oddity in that if you hold your finger it only show the
+ * X co-ordinate (doesn't show Y) but when you release you'll see Y as well.
+ *
+ * My theory on that is that its just not fast enough to show both before the
+ * next interrupt comes in but that may be incorrect.
+ */
+void
+show_xy(GFX_CTX *g, int x, int y)
+{
+	char buf[40];
+	int dx;
+
+	gfx_move_to(g, 5, 423);
+	gfx_fill_rounded_rectangle(g, 200, 34, 5, GFX_COLOR_BLUE);
+	gfx_draw_rounded_rectangle(g, 200, 34, 5, GFX_COLOR_WHITE);
+	snprintf(buf, 40, "%3d, %3d", x, y);
+	dx = gfx_get_string_width(g, buf);
+	dx = 5+ ((200 - dx) / 2);
+	gfx_set_text_size(g, 2);
+	gfx_set_text_cursor(g, dx, 448);
+	gfx_set_text_color(g, GFX_COLOR_YELLOW, GFX_COLOR_BLUE);
+	gfx_puts(g, buf);
+}
+
 /*
  * This demo demonstrates the use of the FocalTech
  * FT6206 Touch Controller that is part of the display
@@ -265,15 +384,21 @@ get_touch(int wait)
  * The controller is connected to pins PB8 and PB9 (SCL, SDA)
  * and it connects an interrupt line to PJ5.
  *
- * The demo displays a target where you touch the display and
- * provides additional information to the serial port at
- * 57600 baud.
+ * The demo displays a region that you can drag your finger around
+ * (or two) and it will leave cyan and yellow pixels in its wake.
+ * 
+ * Two "buttons" are implemented which work somewhat like the interrupt
+ * driven button example, in that when the finger is lifted (un-pressed)
+ * from the area where the box is, the action is taken.
+ *
+ * Some additional information is sent to the serial port at 57600 baud.
  */
 int
 main(void)
 {
 	int		res, lib[2];
 	char	*chip_id;
+	int		showxy = 1;
 	GFX_CTX local_context;
 	GFX_CTX *g;
 
@@ -311,14 +436,6 @@ main(void)
 	/* Turn on interrupts */
 	nvic_enable_irq(NVIC_EXTI9_5_IRQ);
 
-	/*** Common code
-	 *
-	 * From here down, the code is the same in both the polling and
-	 * interrupt versions.
-	 *
-	 * Start with a basic sanity check, make sure we see the FT6x06
-	 * device and print out other version information.
-	 *                                                             ***/
 	printf("Reading device ID\n");
 	res = read_reg(touch_device, FT6206_DEVICE_ID);
 	switch (res) {
@@ -358,10 +475,7 @@ main(void)
 
 	g = gfx_init(&local_context, draw_pixel, 800, 480, GFX_FONT_LARGE, 
 						(void *)FRAMEBUFFER_ADDRESS);
-	gfx_move_to(g, 15, 15);
-	gfx_set_text_color(g,GFX_COLOR_YELLOW, GFX_COLOR_BLACK);
-	gfx_puts(g, "Touch Controller Demo");
-	lcd_flip(0);
+	init_screen(g);
 
 	while (1) {
 		touch_event *td;
@@ -369,20 +483,47 @@ main(void)
 		/* Get a touch event, spin wait if no touching */
 		td = get_touch(1);
 
-		gfx_draw_point_at(g, td->tp[0].y, 480 - td->tp[0].x, GFX_COLOR_CYAN);
-		gfx_draw_point_at(g, td->tp[1].y, 480 - td->tp[1].x, GFX_COLOR_YELLOW);
-		lcd_flip(0);
-
-		/* move cursor to start of data area, clear to end of screen */
-		printf("\033[8;1H\033[J\n");
-		printf("  Total touch events : %d\n", touch_detects);
-		printf("Total gesture events : %d\n\n", gesture_detects);
-		/* This clears the previous second touch printout */
-		printf("\033[J\n");
-		print_touch(&(td->tp[0]), "Touch 1");
-		/* can only do "up to two" touches so this is either 1 or 2 */
-		if (td->n > 1) {
-			print_touch(&(td->tp[1]), "Touch 2");
+		/* check to see if the touch landed in the 'clear' box */
+		if ((td->tp[0].x > 645) && (td->tp[0].x < 795) &&
+		    (td->tp[0].y > 5) && (td->tp[0].y < 55)) {
+			/* only do it when the finger is lifted */
+			if (td->tp[0].evt == 0) {
+				continue;
+			}
+			printf("Clear pressed\n");
+			init_screen(g);
+			if (showxy) {
+				show_xy(g, td->tp[0].x, td->tp[0].y);
+			}
+			lcd_flip(0);
+			continue;
 		}
+
+		/* check to see if the touch landed in the 'show x/y' box */
+		if ((td->tp[0].x > 645) && (td->tp[0].x < 795) &&
+		    (td->tp[0].y > 65) && (td->tp[0].y < 115)) {
+			printf("Show XY pressed\n");
+			/* only do it when the finger is lifted */
+			if (td->tp[0].evt == 0) {
+				continue;
+			}
+			showxy = (showxy != 0) ? 0 : 1;
+			if (showxy) {
+				show_xy(g, td->tp[0].x, td->tp[0].y);
+			} else {
+				/* remove it */
+				gfx_move_to(g, 5, 423);
+				gfx_fill_rounded_rectangle(g, 200, 34, 5, GFX_COLOR_BLACK);
+			}
+			lcd_flip(0);
+			msleep(500);
+			continue;
+		}
+		gfx_draw_point_at(g, td->tp[0].x, td->tp[0].y, GFX_COLOR_CYAN);
+		gfx_draw_point_at(g, td->tp[1].x, td->tp[1].y, GFX_COLOR_YELLOW);
+		if (showxy) {
+			show_xy(g, td->tp[0].x, td->tp[0].y);
+		}
+		lcd_flip(1);
 	}
 }
