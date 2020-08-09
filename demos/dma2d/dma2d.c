@@ -841,6 +841,7 @@ main(void) {
 	float avg_frame;
 	int	can_switch;
 	int	opt, ds;
+	touch_event *te;
 
 	GFX_CTX local_context;
 	GFX_CTX *g;
@@ -908,6 +909,13 @@ main(void) {
 		} else  if (((t0 / 1000) % 10 != 0) && (can_switch == 0)) {
 			can_switch = 1;
 		}
+		te = get_touch(0);
+		if (te != NULL) {
+			if (te->tp[0].evt) {
+				opt = (opt + 1) % MAX_OPTS;
+			}
+		}
+
 
 		/*
 		 * The first four options (0, 1, 2, 3) all render the digits
