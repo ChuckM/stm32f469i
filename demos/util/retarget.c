@@ -39,6 +39,7 @@ void null_init(void);
 #pragma weak sdram_init = null_init
 #pragma weak qspi_init = null_init
 #pragma weak lcd_init = null_init
+#pragma weak touch_init = null_init
 
 static void SystemInit(void);
 
@@ -140,6 +141,7 @@ static void SystemInit()
 	sdram_init();
 	qspi_init();
 	lcd_init();
+	touch_init(0x80);
 	next_char = NULL;
 }
 

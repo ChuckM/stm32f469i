@@ -279,9 +279,10 @@ void local_heap_setup(uint8_t **start, uint8_t **end);
  *
  */
 
-#define I2C_100KHZ	0
-#define I2C_400KHZ	1
-#define I2C_1MHZ	2
+#define I2C_100KHZ		0
+#define I2C_400KHZ		1
+#define I2C_1MHZ		2
+#define SEND_I2C_STOP	1
 
 /*
  * An i2c "device" on the i2c bus 'i2c' with address 'addr'
@@ -320,3 +321,4 @@ typedef struct {
 
 /* check for touch event, block if wait is true */
 touch_event *get_touch(int wait);
+void touch_init(uint8_t threshold);
