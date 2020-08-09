@@ -34,19 +34,16 @@
 #define FT6206_STATE		0xBC
 #define FT6206_THRESH		0x80
 #define FT6206_REPORT		0xA4
-#define FT6206_DELTA_UD		0x95
-#define FT6206_DELTA_LR		0x94
-#define FT6206_DELTA_Z		0x96
 
 #define SEND_I2C_STOP	1
+
 /* device structure with I2C channel and address for the touch device */
 i2c_dev *touch_device;
 
 /*
- * Tracks how many events and gestures the code processes
+ * Tracks how many events the code processes
  */
 volatile int touch_detects = 0;
-volatile int gesture_detects = 0;
 
 /****
  *  local helper functions that make the code a bit cleaner
@@ -77,44 +74,16 @@ get_touch_data(i2c_dev *t, touch_event *te)
 		te->tp[i].tid = (buf[ndx+2] & 0xf0) >> 4;
 		te->tp[i].y = ((buf[ndx+2] & 0xf) << 8) | (buf[ndx+3] & 0xff);
 	}
-	switch(buf[1]) {
-		case 0:
-			te->g = GEST_NONE;
-			break;
-		case 0x10:
-			te->g = GEST_UP;
-			break;
-		case 0x14:
-			te->g = GEST_RIGHT;
-			break;
-		case 0x18:
-			te->g = GEST_DOWN;
-			break;
-		case 0x1c:
-			te->g = GEST_LEFT;
-			break;
-		case 0x48:
-			te->g = GEST_ZOOM_IN;
-			break;
-		case 0x49:
-			te->g = GEST_ZOOM_OUT;
-			break;
-		default:
-			te->g = GEST_UNKNOWN;
-			break;
-	}
 	te->n = buf[2];
 
 	/* statistics accounting */
-	if (te->g != GEST_NONE) {
-		gesture_detects++;
-	}
 	touch_detects++;
 }
 
 /*
  * Read and return the value from a single register on the
  * touch controller chip.
+ * NB: They assume success, it's only an example
  */
 int
 read_reg(i2c_dev *i2c, uint8_t reg)
@@ -122,12 +91,8 @@ read_reg(i2c_dev *i2c, uint8_t reg)
 	uint8_t buf[4];
 
 	buf[0] = reg;
-	if (i2c_write(i2c, buf, 1 , !SEND_I2C_STOP) < 0) {
-		return -1;
-	}
-	if (i2c_read(i2c, buf, 1, SEND_I2C_STOP) < 0) {
-		return -2;
-	}
+	i2c_write(i2c, buf, 1 , !SEND_I2C_STOP); 
+	i2c_read(i2c, buf, 1, SEND_I2C_STOP);
 	return (int) buf[0];
 }
 
@@ -142,9 +107,7 @@ write_reg(i2c_dev *i2c, uint8_t reg, uint8_t value)
 
 	buf[0] = reg;
 	buf[1] = value;
-	if (i2c_write(i2c, buf, 2 , SEND_I2C_STOP) < 0) {
-		return -1;
-	}
+	i2c_write(i2c, buf, 2 , SEND_I2C_STOP);
 	return 1;
 }
 
@@ -194,9 +157,7 @@ get_touch(int wait)
  * The controller is connected to pins PB8 and PB9 (SCL, SDA)
  * and it connects an interrupt line to PJ5.
  *
- * The demo displays a target where you touch the display and
- * provides additional information to the serial port at
- * 57600 baud.
+ * The example writes out touch data to the serial port at 57600 baud.
  */
 int
 main(void)
@@ -224,11 +185,8 @@ main(void)
 	rcc_periph_clock_enable(RCC_GPIOJ);
 	gpio_mode_setup(GPIOJ, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO5);
 
-	/*** Common code
-	 *
-	 * From here down, the code is the same in both the polling and
-	 * interrupt versions.
-	 *
+	/***
+	 * 
 	 * Start with a basic sanity check, make sure we see the FT6x06
 	 * device and print out other version information.
 	 *                                                             ***/
@@ -261,8 +219,8 @@ main(void)
 	printf("      Mode : %s\n", (res == 0) ? "Polling" : "Trigger");
 
 	/*
- 	 * This effectively kicks it off. Prior to setting this threshold
- 	 * is 0xFF (reset value) which basically turns off touch detection.
+ 	 * Set the threshold somewhere. If its too "touchy" to you can
+ 	 * increase this number.
  	 */
 	write_reg(touch_device, FT6206_THRESH, 0x80);
 	
@@ -275,7 +233,6 @@ main(void)
 		/* move cursor to start of data area, clear to end of screen */
 		printf("\033[8;1H\033[J\n");
 		printf("  Total touch events : %d\n", touch_detects);
-		printf("Total gesture events : %d\n\n", gesture_detects);
 		/* This clears the previous second touch printout */
 		printf("\033[J\n");
 		print_touch(&(td->tp[0]), "Touch 1");

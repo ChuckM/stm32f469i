@@ -46,10 +46,9 @@
 i2c_dev *touch_device;
 
 /*
- * Tracks how many events and gestures the code processes
+ * Tracks how many events the code processes
  */
 volatile int touch_detects = 0;
-volatile int gesture_detects = 0;
 
 /*
  * Pixel drawing function for the gfx library.
@@ -108,38 +107,9 @@ get_touch_data(i2c_dev *t, touch_event *te)
 		te->tp[i].x = tsy;
 		te->tp[i].y = 480 - tsx;
 	}
-	switch(buf[1]) {
-		case 0:
-			te->g = GEST_NONE;
-			break;
-		case 0x10:
-			te->g = GEST_UP;
-			break;
-		case 0x14:
-			te->g = GEST_RIGHT;
-			break;
-		case 0x18:
-			te->g = GEST_DOWN;
-			break;
-		case 0x1c:
-			te->g = GEST_LEFT;
-			break;
-		case 0x48:
-			te->g = GEST_ZOOM_IN;
-			break;
-		case 0x49:
-			te->g = GEST_ZOOM_OUT;
-			break;
-		default:
-			te->g = GEST_UNKNOWN;
-			break;
-	}
 	te->n = buf[2];
 
 	/* statistics accounting */
-	if (te->g != GEST_NONE) {
-		gesture_detects++;
-	}
 	touch_detects++;
 }
 
@@ -153,12 +123,8 @@ read_reg(i2c_dev *i2c, uint8_t reg)
 	uint8_t buf[4];
 
 	buf[0] = reg;
-	if (i2c_write(i2c, buf, 1 , !SEND_I2C_STOP) < 0) {
-		return -1;
-	}
-	if (i2c_read(i2c, buf, 1, SEND_I2C_STOP) < 0) {
-		return -2;
-	}
+	i2c_write(i2c, buf, 1 , !SEND_I2C_STOP);
+	i2c_read(i2c, buf, 1, SEND_I2C_STOP);
 	return (int) buf[0];
 }
 
@@ -173,9 +139,7 @@ write_reg(i2c_dev *i2c, uint8_t reg, uint8_t value)
 
 	buf[0] = reg;
 	buf[1] = value;
-	if (i2c_write(i2c, buf, 2 , SEND_I2C_STOP) < 0) {
-		return -1;
-	}
+	i2c_write(i2c, buf, 2 , SEND_I2C_STOP);
 	return 1;
 }
 
@@ -465,8 +429,9 @@ main(void)
 	printf("      Mode : %s\n", (res == 0) ? "Polling" : "Trigger");
 
 	/*
- 	 * This effectively kicks it off. Prior to setting this threshold
- 	 * is 0xFF (reset value) which basically turns off touch detection.
+ 	 * Sets the trigger threshold mid point? If it is "too touchy" you
+ 	 * can increase this number, if it is missing your touches then make
+ 	 * it lower.
  	 */
 	write_reg(touch_device, FT6206_THRESH, 0x80);
 	

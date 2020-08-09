@@ -304,18 +304,6 @@ int	i2c_read(i2c_dev *chan, uint8_t *buf, size_t buf_size, int send_stop);
  * Touch panel controller parameters
  */
 
-/* If a gesture is recognized */
-typedef enum {
-	GEST_NONE,
-	GEST_UP,
-	GEST_DOWN,
-	GEST_LEFT,
-	GEST_RIGHT,
-	GEST_ZOOM_IN,
-	GEST_ZOOM_OUT,
-	GEST_UNKNOWN
-} touch_gesture;
-
 /* A single touch point (up to 2 per event) */
 typedef struct {
 	int	evt;
@@ -328,7 +316,6 @@ typedef struct {
 typedef struct {
 	int				n;	/* number of valid touch points */
 	touch_point 	tp[2];
-	touch_gesture	g;
 } touch_event;
 
 /* check for touch event, block if wait is true */
